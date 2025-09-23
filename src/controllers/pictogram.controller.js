@@ -1,133 +1,121 @@
-import * as pictogramService from "../services/pictogram.service.js";
-import UserError from "../errors/user.error.js";
+// controllers/pictogram.controller.js
+import { PictogramService } from "../services/pictogram.service.js";
+import { ImageRepository } from "../repositories/image.repository.js";
+import { PictogramRepository } from "../repositories/pictogram.repository.js";
+import { serializeBigInt } from "../utils/serialize.js";
 
-export const getBasePictograms = async (req, res) => {
-  try {
-    const pictograms = await pictogramService.getBasePictograms();
-    res.json(pictograms);
-  } catch (error) {
-    res.status(500).json({ message: "Error al obtener pictogramas base" });
-  }
-};
+const pictogramService = new PictogramService();
+const imageRepo = new ImageRepository();
+const pictogramRepo = new PictogramRepository();
 
-export const createBasePictogram = async (req, res) => {
+/**
+ * Crear pictograma con imagen
+ */
+export const createPictogram = async (req, res) => {
   try {
-    const { name, imageUrl, description } = req.body;
-    const pictogram = await pictogramService.createBasePictogram({
-      name,
-      imageUrl,
-      description,
+    const { name } = req.body;
+    const file = req.file;
+
+    if (!name || !file) {
+      return res
+        .status(400)
+        .json({ message: "Nombre y archivo son requeridos" });
+    }
+
+    // Guardar imagen
+    const image = await imageRepo.createImage({
+      url: `/uploads/images/${file.filename}`,
+      filesize: file.size,
+      mimeType: file.mimetype,
+      userId: req.user.userId,
     });
-    res.status(201).json(pictogram);
-  } catch (error) {
-    res.status(error.statusCode || 500).json({ message: error.message });
-  }
-};
 
-export const getUserPictograms = async (req, res) => {
-  try {
-    const userId = req.user.id; // viene del token
-    const pictograms = await pictogramService.getUserPictograms(userId);
-    res.json(pictograms);
-  } catch (error) {
-    res.status(500).json({ message: "Error al obtener pictogramas" });
-  }
-};
-
-export const createUserPictogram = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { name, imageUrl, description } = req.body;
-    const pictogram = await pictogramService.createUserPictogram({
-      userId,
+    // Crear pictograma
+    const pictogram = await pictogramRepo.createPictogram({
       name,
-      imageUrl,
-      description,
+      imageId: image.id,
+      createdBy: req.user.userId,
     });
-    res.status(201).json(pictogram);
-  } catch (error) {
-    res.status(error.statusCode || 500).json({ message: error.message });
+
+    res.status(201).json(serializeBigInt(pictogram));
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 };
 
+/**
+ * Editar pictograma
+ */
 export const updatePictogram = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { name, imageUrl, description } = req.body;
+    const pictogramId = parseInt(req.params.id);
+    const { name } = req.body; // campo de texto
+    const file = req.file; // archivo subido
 
-    const pictogram = await pictogramService.getPictogramById(Number(id));
-    if (!pictogram) throw new UserError("Pictograma no encontrado", 404);
-
-    // Validación de permisos
-    if (pictogram.userId === null) {
-      // Es de la librería base → solo admin
-      if (req.user.role !== "admin")
-        throw new UserError(
-          "No tienes permisos para editar pictogramas base",
-          403
-        );
-    } else {
-      // Es de un usuario → solo el dueño
-      if (pictogram.userId !== req.user.id)
-        throw new UserError(
-          "No puedes editar pictogramas de otros usuarios",
-          403
-        );
+    if (!name && !file) {
+      return res.status(400).json({ message: "Debe enviar nombre o imagen" });
     }
 
-    const updated = await pictogramService.updatePictogram(Number(id), {
-      name,
-      imageUrl,
-      description,
-    });
-
-    res.json(updated);
-  } catch (error) {
-    res.status(error.statusCode || 500).json({ message: error.message });
-  }
-};
-
-export const deletePictogram = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const pictogram = await pictogramService.getPictogramById(Number(id));
-    if (!pictogram) throw new UserError("Pictograma no encontrado", 404);
-
-    // Validación de permisos
-    if (pictogram.userId === null) {
-      if (req.user.role !== "admin")
-        throw new UserError(
-          "No tienes permisos para borrar pictogramas base",
-          403
-        );
-    } else {
-      if (pictogram.userId !== req.user.id)
-        throw new UserError(
-          "No puedes borrar pictogramas de otros usuarios",
-          403
-        );
-    }
-
-    await pictogramService.deletePictogram(Number(id));
-    res.json({ message: "Pictograma eliminado con éxito" });
-  } catch (error) {
-    res.status(error.statusCode || 500).json({ message: error.message });
-  }
-};
-
-export const getPictogramById = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user?.id; // puede ser null si no se requiere auth
-
-    const pictogram = await pictogramService.getPictogramById(
-      Number(id),
-      userId
+    const updated = await pictogramService.updatePictogram(
+      req.user,
+      pictogramId,
+      { name, imageFile: file }
     );
 
-    res.json(pictogram);
-  } catch (error) {
-    res.status(error.statusCode || 500).json({ message: error.message });
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+// Soft delete de pictograma
+export const deletePictogram = async (req, res) => {
+  try {
+    const pictogramId = parseInt(req.params.id);
+    const deleted = await pictogramService.softDeletePictogram(pictogramId);
+    res.json(deleted);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+/**
+ * Asignar pictograma a uno o varios grids
+ */
+export const assignPictogramToGrids = async (req, res) => {
+  try {
+    const { pictogramId, gridIds } = req.body;
+    const result = await pictogramService.assignPictogramToGrids(
+      pictogramId,
+      gridIds
+    );
+    res.json(serializeBigInt(result));
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+/**
+ * Obtener un pictograma por ID
+ */
+export const getPictogram = async (req, res) => {
+  try {
+    const pictogramId = parseInt(req.params.id);
+    const pictogram = await pictogramService.getPictogram(pictogramId);
+    res.json(serializeBigInt(pictogram));
+  } catch (err) {
+    res.status(404).json({ message: err.message });
+  }
+};
+
+/**
+ * Obtener todos los pictogramas
+ */
+export const getAllPictograms = async (req, res) => {
+  try {
+    const pictograms = await pictogramService.getAllPictograms();
+    res.json(serializeBigInt(pictograms));
+  } catch (err) {
+    res.status(400).json({ message: err.message });
   }
 };

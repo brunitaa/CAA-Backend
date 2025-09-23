@@ -1,103 +1,75 @@
+import { PictogramRepository } from "../repositories/pictogram.repository.js";
+import { ImageRepository } from "../repositories/image.repository.js";
 import prisma from "../lib/prisma.js";
-import UserError from "../errors/user.error.js";
 
-// Obtener todos los pictogramas de la librería base
-export const getBasePictograms = async () => {
-  return await prisma.pictogram.findMany({
-    where: { userId: null },
-    orderBy: { createdAt: "desc" },
-  });
-};
+const pictogramRepo = new PictogramRepository();
+const imageRepo = new ImageRepository();
 
-// Crear pictograma en la librería base (solo admin)
-export const createBasePictogram = async ({ name, imageUrl, description }) => {
-  if (!name || !imageUrl)
-    throw new UserError("Nombre e imagen obligatorios", 400);
+export class PictogramService {
+  async createPictogram(user, { name, imageFile }) {
+    if (!name || !imageFile) throw new Error("Nombre y archivo son requeridos");
 
-  return await prisma.pictogram.create({
-    data: {
+    // Guardar imagen
+    const image = await imageRepo.createImage({
+      url: `/uploads/images/${imageFile.filename}`,
+      userId: user.userId,
+      filesize: imageFile.size,
+      mimeType: imageFile.mimetype,
+    });
+
+    return pictogramRepo.createPictogram({
       name,
-      imageUrl,
-      description: description || null,
-      userId: null,
-    },
-  });
-};
+      imageId: image.id,
+      createdBy: user.userId,
+    });
+  }
 
-// Obtener todos los pictogramas de un usuario
-export const getUserPictograms = async (userId) => {
-  return await prisma.pictogram.findMany({
-    where: { userId },
-    orderBy: { createdAt: "desc" },
-  });
-};
+  async updatePictogram(user, pictogramId, { name, imageFile }) {
+    const pictogram = await pictogramRepo.findById(pictogramId);
+    if (!pictogram || !pictogram.isActive)
+      throw new Error("Pictograma no encontrado");
 
-// Obtener un pictograma específico
-export const getPictogramById = async (id, userId = null) => {
-  const pictogram = await prisma.pictogram.findUnique({
-    where: { id },
-  });
+    let newImageId = pictogram.imageId;
+    if (imageFile) {
+      const image = await imageRepo.createImage({
+        url: `/uploads/images/${imageFile.filename}`,
+        userId: user.userId,
+        filesize: imageFile.size,
+        mimeType: imageFile.mimetype,
+      });
+      newImageId = image.id;
+    }
 
-  if (!pictogram) throw new UserError("Pictograma no encontrado", 404);
+    return prisma.pictogram.update({
+      where: { id: pictogramId },
+      data: {
+        name: name || pictogram.name,
+        imageId: newImageId,
+        updatedAt: new Date(),
+      },
+    });
+  }
 
-  // Si es pictograma personal, solo su dueño puede verlo
-  if (pictogram.userId && pictogram.userId !== userId)
-    throw new UserError("No tienes permiso para ver este pictograma", 403);
+  // Soft delete
+  async softDeletePictogram(pictogramId) {
+    const pictogram = await pictogramRepo.findById(pictogramId);
+    if (!pictogram || !pictogram.isActive)
+      throw new Error("Pictograma no encontrado");
 
-  return pictogram;
-};
+    return pictogramRepo.updatePictogram(pictogramId, {
+      isActive: false,
+      deletedAt: new Date(),
+    });
+  }
 
-// Crear un pictograma de usuario
-export const createUserPictogram = async ({
-  userId,
-  name,
-  imageUrl,
-  description,
-}) => {
-  if (!name || !imageUrl)
-    throw new UserError("Nombre e imagen obligatorios", 400);
+  async getPictogram(pictogramId) {
+    const pictogram = await pictogramRepo.findById(pictogramId);
+    if (!pictogram || !pictogram.isActive)
+      throw new Error("Pictograma no encontrado");
+    return pictogram;
+  }
 
-  return await prisma.pictogram.create({
-    data: {
-      name,
-      imageUrl,
-      description: description || null,
-      userId,
-    },
-  });
-};
-
-export const updatePictogram = async ({
-  id,
-  userId,
-  name,
-  imageUrl,
-  description,
-}) => {
-  const pictogram = await prisma.pictogram.findUnique({ where: { id } });
-  if (!pictogram) throw new UserError("Pictograma no encontrado", 404);
-
-  // Validación: solo admin o dueño del pictograma pueden editar
-  if (pictogram.userId && pictogram.userId !== userId)
-    throw new UserError("No tienes permiso para editar este pictograma", 403);
-
-  return await prisma.pictogram.update({
-    where: { id },
-    data: {
-      name: name || pictogram.name,
-      imageUrl: imageUrl || pictogram.imageUrl,
-      description: description ?? pictogram.description,
-    },
-  });
-};
-
-export const deletePictogram = async ({ id, userId }) => {
-  const pictogram = await prisma.pictogram.findUnique({ where: { id } });
-  if (!pictogram) throw new UserError("Pictograma no encontrado", 404);
-
-  // Validación: solo admin o dueño del pictograma pueden borrar
-  if (pictogram.userId && pictogram.userId !== userId)
-    throw new UserError("No tienes permiso para borrar este pictograma", 403);
-
-  return await prisma.pictogram.delete({ where: { id } });
-};
+  async getAllPictograms() {
+    return pictogramRepo.getAllPictograms();
+  }
+}

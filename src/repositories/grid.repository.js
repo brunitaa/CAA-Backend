@@ -6,9 +6,13 @@ export class GridRepository {
     return prisma.grid.create({ data });
   }
 
-  async findGridById(id) {
-    return prisma.grid.findUnique({
-      where: { id },
+  async findById(id) {
+    return prisma.grid.findUnique({ where: { id } });
+  }
+
+  async addPictogram(gridId, pictogramId) {
+    return prisma.gridPictogram.create({
+      data: { gridId, pictogramId, position: 0 }, // posición inicial, se puede mejorar
     });
   }
 
