@@ -1,28 +1,45 @@
-import { Router } from "express";
+import express from "express";
 import * as authController from "../controllers/auth.controller.js";
-import { verifyToken, isAdmin } from "../middlewares/auth.middleware.js";
-import validate from "../middlewares/validate.middleware.js";
-import { registerSchema, loginSchema } from "../validations/auth.validation.js";
+import { authorizeRole, verifyToken } from "../middlewares/auth.middleware.js";
+import {
+  requestPasswordOTP,
+  resetPasswordWithOTP,
+  getProfile,
+} from "../controllers/auth.controller.js";
 
-const router = Router();
+const router = express.Router();
 
-// Rutas públicas
-router.post("/register", validate(registerSchema), authController.register);
-router.post("/login", validate(loginSchema), authController.login);
+router.post("/request-password-otp", requestPasswordOTP);
+router.post("/reset-password-otp", resetPasswordWithOTP);
+router.get("/profile", verifyToken, getProfile);
+// Caregiver login
+router.post("/register-caregiver", authController.registerCaregiver);
+// Verificación de OTP
+router.post("/verify-otp", authController.verifyOTP);
 
-// Ruta protegida solo para admins
+// Reenvío de OTP
+router.post("/resend-otp", authController.resendOTP);
+router.post("/caregiver/login", authController.loginCaregiver);
+
+// Crear Speaker (solo Caregiver)
 router.post(
-  "/admin/create-mobile-user",
-  verifyToken,
-  isAdmin,
-  authController.createMobileUser
+  "/speaker",
+  authorizeRole(["caregiver"]),
+  authController.createSpeaker
 );
 
-// Rutas protegidas
-router.post("/logout", verifyToken, authController.logout);
-router.get("/perfil", verifyToken, authController.getProfile);
-router.get("/admin", verifyToken, isAdmin, (req, res) =>
-  res.json({ msg: "Bienvenido administrador" })
+// Seleccionar Speaker (solo Caregiver)
+router.post(
+  "/speaker/select",
+  authorizeRole(["caregiver"]),
+  authController.selectSpeaker
+);
+
+// Logout (Caregiver o Speaker)
+router.post(
+  "/logout",
+  authorizeRole(["caregiver", "admin"]),
+  authController.logout
 );
 
 export default router;

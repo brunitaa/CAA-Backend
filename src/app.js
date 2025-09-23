@@ -2,6 +2,10 @@ import express from "express";
 import morgan from "morgan";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import adminRoutes from "./routes/admin.routes.js";
+import authRoutes from "./routes/auth.routes.js";
+import speakerRoutes from "./routes/speaker.routes.js";
+import gridRoutes from "./routes/grid.routes.js";
 
 const app = express();
 
@@ -12,9 +16,10 @@ app.use(express.json());
 app.use(cookieParser());
 
 // Rutas
-import authRoutes from "./routes/auth.routes.js";
+app.use("/api/admin", adminRoutes);
 app.use("/api/auth", authRoutes);
-import pictogramRoutes from "./routes/pictograms.routes.js";
-app.use("/api/pictograms", pictogramRoutes);
+app.use("/api", speakerRoutes);
+app.use("/api/speaker", speakerRoutes);
+app.use("/api/grids", gridRoutes);
 
 export default app;

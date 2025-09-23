@@ -1,39 +1,286 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+generator client {
+  provider = "prisma-client-js"
+}
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
-  output   = "../src/generated/client"
+
+enum Gender {
+  female
+  male
+  other
+}
+
+model Role {
+  id    Int    @id @default(autoincrement())
+  name  String @unique
+
+  users User[]
 }
 
 model User {
+  id                Int                @id @default(autoincrement())
+  username          String             @unique
+  gender            Gender?
+  age               Int?
+  roleId            Int
+  role              Role              @relation(fields: [roleId], references: [id])
+  isActive          Boolean            @default(true)
+  lastLogin         DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime?
+
+  auth              UserAuth?
+  pictograms        Pictogram[]        @relation("PictogramOwner")
+  createdPictograms Pictogram[]        @relation("PictogramCreator")
+  caregiverSpeakersCaregiver CaregiverSpeaker[] @relation("CaregiverRelation")
+  caregiverSpeakersSpeaker   CaregiverSpeaker[] @relation("SpeakerRelation")
+  grids             Grid[]
+  images            Image[]
+  sentences         Sentence[]
+  sessions          UserSession[]
+  statistics        UserStatistics?
+  devices           Device[]
+  mlTrainingData    MLTrainingData[]
+  mlPredictions     MLPrediction[]
+  authTokens        AuthToken[]
+}
+
+model UserAuth {
+  id             Int      @id @default(autoincrement())
+  userId         Int      @unique
+  email          String   @unique
+  emailConfirmed Boolean  @default(false)
+  passwordHash   String
+  passwordSalt   String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model CaregiverSpeaker {
+  id          Int   @id @default(autoincrement())
+  caregiverId Int
+  speakerId   Int
+  createdAt   DateTime @default(now())
+
+  caregiver User @relation("CaregiverRelation", fields: [caregiverId], references: [id])
+  speaker   User @relation("SpeakerRelation", fields: [speakerId], references: [id])
+
+  @@unique([caregiverId, speakerId])
+}
+
+model Image {
   id        Int      @id @default(autoincrement())
-  username  String   @unique
-  password  String
-  email     String?  @unique
-  role      String   @default("usuario")
+  url       String
+  filesize  Int?
+  height    Int?
+  width     Int?
+  mimeType  String?
+  userId    Int?
   createdAt DateTime @default(now())
 
+  user User? @relation(fields: [userId], references: [id])
   pictograms Pictogram[]
 }
 
-model Pictogram {
-  id          Int      @id @default(autoincrement())
-  userId      Int?     @map("user_id")
-  name        String
-  imageUrl    String
+model Grid {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     // ahora opcional
+  name      String
   description String?
-  synced      Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  isActive  Boolean  @default(true)
+  deletedAt DateTime?
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
 
-  user User? @relation(fields: [userId], references: [id])
+  user         User?       @relation(fields: [userId], references: [id])
+  gridPictograms GridPictogram[]
+}
+
+
+model GridPictogram {
+  id         Int    @id @default(autoincrement())
+  gridId     Int
+  pictogramId Int
+  position   Int
+  createdAt  DateTime @default(now())
+
+  grid       Grid      @relation(fields: [gridId], references: [id])
+  pictogram  Pictogram @relation(fields: [pictogramId], references: [id])
+
+  @@unique([gridId, pictogramId])
+  @@unique([gridId, position])
+}
+
+model PartOfSpeech {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  name        String
+  description String?
+
+  pictogramPos PictogramPos[]
+}
+
+model Pictogram {
+  id             Int               @id @default(autoincrement())
+  name           String
+  imageId        Int?
+  userId         Int?
+  user           User?             @relation("PictogramOwner", fields: [userId], references: [id])
+  lemma          String?
+
+  createdBy      Int
+  creator        User              @relation("PictogramCreator", fields: [createdBy], references: [id])
+
+  usageFrequency BigInt            @default(0)
+  isActive       Boolean            @default(true)
+  deletedAt      DateTime?
+  isMultiword    Boolean            @default(false)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime?
+
+  image          Image?            @relation(fields: [imageId], references: [id])
+  pictogramPos   PictogramPos[]
+  gridPictograms GridPictogram[]
+  semantic       PictogramSemantic[]
+  mlTraining     MLTrainingData[]
+  predictedBy    MLPrediction[]    @relation("PredictedPictogramRelation")
+  actualFor      MLPrediction[]    @relation("ActualPictogramRelation")
+  statisticsFav  UserStatistics?   @relation("FavoritePictogram")
+}
+
+model PictogramPos {
+  id          Int       @id @default(autoincrement())
+  pictogramId Int
+  posId       Int
+  isPrimary   Boolean   @default(false)
+  confidence  Decimal   @default(1.0)
+  source      String?
+  createdAt   DateTime  @default(now())
+
+  pictogram   Pictogram @relation(fields: [pictogramId], references: [id])
+  pos         PartOfSpeech @relation(fields: [posId], references: [id])
+
+  @@unique([pictogramId, posId])
+}
+
+model SemanticCategory {
+  id        Int                @id @default(autoincrement())
+  name      String             @unique
+  description String?
+  parentId  Int?
+
+  parent      SemanticCategory? @relation("CategoryParent", fields: [parentId], references: [id])
+  children    SemanticCategory[] @relation("CategoryParent")
+  pictograms  PictogramSemantic[]
+}
+
+model PictogramSemantic {
+  pictogramId Int
+  categoryId  Int
+
+  pictogram  Pictogram        @relation(fields: [pictogramId], references: [id])
+  category   SemanticCategory @relation(fields: [categoryId], references: [id])
+
+  @@id([pictogramId, categoryId])
+}
+
+model Sentence {
+  id             Int      @id @default(autoincrement())
+  userId         Int
+  telegraphicText String
+  naturalText    String
+  meta           Json?
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model UserSession {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  startedAt       DateTime @default(now())
+  endedAt         DateTime?
+  durationSeconds Int?
+  deviceInfo      String?
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model UserStatistics {
+  id                  Int        @id @default(autoincrement())
+  userId              Int        @unique
+  user                User       @relation(fields: [userId], references: [id])
+  totalSessions       Int        @default(0)
+  totalSentences      Int        @default(0)
+  totalPictogramsUsed Int        @default(0)
+  lastActive          DateTime?
+  favoritePictogramId Int?       @unique
+  favoritePictogram   Pictogram? @relation("FavoritePictogram", fields: [favoritePictogramId], references: [id])
+  updatedAt           DateTime?
+}
+
+model Device {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  deviceType String
+  deviceToken String? @unique
+  lastSeen   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model MLTrainingData {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  sequence        Json
+  nextPictogramId Int?
+  context         Json?
+  modelVersion    String?
+  createdAt       DateTime @default(now())
+
+  user       User       @relation(fields: [userId], references: [id])
+  nextPictogram Pictogram? @relation(fields: [nextPictogramId], references: [id])
+}
+
+model MLPrediction {
+  id                   Int        @id @default(autoincrement())
+  userId               Int
+  user                 User       @relation(fields: [userId], references: [id])
+
+  predictedPictogramId Int
+  predictedPictogram   Pictogram  @relation("PredictedPictogramRelation", fields: [predictedPictogramId], references: [id])
+
+  actualPictogramId    Int?
+  actualPictogram      Pictogram? @relation("ActualPictogramRelation", fields: [actualPictogramId], references: [id])
+
+  context              Json
+  createdAt            DateTime   @default(now())
+}
+
+model AuthToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  tokenHash String   @unique
+  purpose   String
+  meta      Json?
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model OTP {
+  email      String   @id
+  otp        String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
 }
 

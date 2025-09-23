@@ -1,4 +1,4 @@
-import prisma from "../db.js";
+import prisma from "../lib/prisma.js";
 import UserError from "../errors/user.error.js";
 
 // Obtener todos los pictogramas de la librería base

@@ -1,109 +1,340 @@
-import prisma from "../db.js";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import UserError from "../errors/user.error.js";
+import prisma from "../lib/prisma.js";
+import { hashPassword, comparePassword } from "../utils/hash.js";
+import { signToken } from "../utils/jwt.js";
+import { generateOTP } from "../utils/otp.js";
+import { sendOTPEmail } from "./email.service.js";
 
-export const register = async ({ username, password, email, role }) => {
-  if (!username || !password)
-    throw new UserError("Username y password son requeridos", 400);
+const OTP_TTL_MS = 5 * 60 * 1000; // 5 minutos
 
-  // Verificar si username existe
-  const existingUsername = await prisma.user.findFirst({ where: { username } });
-  if (existingUsername) throw new UserError("El username ya está en uso", 400);
-
-  // Verificar email solo si se envía
-  if (email) {
-    const existingEmail = await prisma.user.findFirst({ where: { email } });
-    if (existingEmail) throw new UserError("El email ya está en uso", 400);
-  }
-
-  // Hashear contraseña
-  const hashedPassword = await bcrypt.hash(password, 10);
-
-  // Crear usuario
-  const newUser = await prisma.user.create({
-    data: {
-      username,
-      password: hashedPassword,
-      role: role || "usuario",
-      email: email || null, // email opcional
-    },
-  });
-
-  return {
-    id: newUser.id,
-    username: newUser.username,
-    email: newUser.email,
-    role: newUser.role,
-  };
+export const ROLE_IDS = {
+  ADMIN: 1,
+  CAREGIVER: 2,
+  SPEAKER: 3,
 };
 
-export const createMobileUser = async ({ username, password, email }) => {
-  if (!username || !password)
-    throw new UserError("Username y password son requeridos", 400);
+export class AuthService {
+  /** ================== ADMIN ================== */
 
-  // Verificar si username existe
-  const existingUsername = await prisma.user.findFirst({ where: { username } });
-  if (existingUsername) throw new UserError("El username ya está en uso", 400);
+  async registerAdmin({ email, username, password, creatorId }) {
+    // Validación de campos
+    const missingFields = [];
+    if (!email) missingFields.push("email");
+    if (!username) missingFields.push("username");
+    if (!password) missingFields.push("password");
+    if (missingFields.length)
+      throw new Error(
+        `Faltan los siguientes campos: ${missingFields.join(", ")}`
+      );
 
-  // Verificar email solo si se envía
-  if (email) {
-    const existingEmail = await prisma.user.findFirst({ where: { email } });
-    if (existingEmail) throw new UserError("El email ya está en uso", 400);
+    // Verificar que el creador sea admin
+    const creator = await prisma.user.findUnique({ where: { id: creatorId } });
+    if (!creator || creator.roleId !== ROLE_IDS.ADMIN)
+      throw new Error("No autorizado");
+
+    // Revisar email y username
+    const existingEmail = await prisma.userAuth.findUnique({
+      where: { email },
+    });
+    if (existingEmail) throw new Error("Email ya registrado");
+
+    const existingUsername = await prisma.user.findUnique({
+      where: { username },
+    });
+    if (existingUsername) throw new Error("Username ya usado");
+
+    // Hash de la contraseña
+    const { hash, salt } = await hashPassword(password);
+
+    // Crear usuario admin inactivo
+    const user = await prisma.user.create({
+      data: {
+        username,
+        roleId: ROLE_IDS.ADMIN,
+        isActive: false,
+        auth: {
+          create: {
+            email,
+            passwordHash: hash,
+            passwordSalt: salt,
+            emailConfirmed: false,
+          },
+        },
+      },
+      include: { auth: true },
+    });
+
+    // Generar OTP
+    const otp = generateOTP();
+    const expiresAt = new Date(Date.now() + OTP_TTL_MS);
+
+    await prisma.OTP.upsert({
+      where: { email },
+      update: { otp, expiresAt, createdAt: new Date() },
+      create: { email, otp, expiresAt, createdAt: new Date() },
+    });
+
+    await sendOTPEmail(email, otp);
+
+    return { message: "Admin registrado. OTP enviado al correo", email };
   }
 
-  // Hashear contraseña
-  const hashedPassword = await bcrypt.hash(password, 10);
+  async verifyAdminOTP({ email, otp }) {
+    const record = await prisma.OTP.findUnique({ where: { email } });
+    if (!record) throw new Error("OTP no encontrado");
+    if (record.otp !== otp) throw new Error("OTP inválido");
 
-  // Crear usuario con rol "usuario"
-  const newUser = await prisma.user.create({
-    data: {
-      username,
-      password: hashedPassword,
-      role: "usuario",
-      email: email || null,
-    },
-  });
+    const userAuth = await prisma.userAuth.findUnique({
+      where: { email },
+      include: { user: true },
+    });
+    if (!userAuth) throw new Error("Usuario no encontrado");
 
-  // Devolver credenciales para que el admin se las entregue
-  return {
-    username: newUser.username,
-    password, // la contraseña en claro para entregar al usuario
-    email: newUser.email,
-    role: newUser.role,
-  };
-};
+    await prisma.user.update({
+      where: { id: userAuth.userId },
+      data: { isActive: true },
+    });
+    await prisma.userAuth.update({
+      where: { email },
+      data: { emailConfirmed: true },
+    });
+    await prisma.OTP.delete({ where: { email } });
 
-export const login = async ({ username, password }) => {
-  if (!username || !password)
-    throw new UserError("Username y password son requeridos", 400);
+    const token = signToken({
+      userId: userAuth.userId,
+      role: "admin",
+      username: userAuth.user.username,
+    });
 
-  // Buscar usuario por username
-  const user = await prisma.user.findFirst({ where: { username } });
-  if (!user) throw new UserError("Usuario no encontrado", 404);
+    return { token, userId: userAuth.userId };
+  }
 
-  // Verificar contraseña
-  const isPasswordValid = await bcrypt.compare(password, user.password);
-  if (!isPasswordValid) throw new UserError("Contraseña incorrecta", 401);
+  async loginAdmin({ email, password }) {
+    const userAuth = await prisma.userAuth.findUnique({
+      where: { email },
+      include: { user: true },
+    });
+    if (!userAuth) throw new Error("Credenciales inválidas");
+    if (!userAuth.emailConfirmed) throw new Error("Email no confirmado");
 
-  // Generar token JWT
-  const token = jwt.sign(
-    { id: user.id, role: user.role },
-    process.env.JWT_SECRET,
-    { expiresIn: "2h" }
-  );
+    const valid = await comparePassword(
+      password,
+      userAuth.passwordHash,
+      userAuth.passwordSalt
+    );
+    if (!valid) throw new Error("Credenciales inválidas");
 
-  return {
-    token,
-    user: {
+    if (userAuth.user.roleId !== ROLE_IDS.ADMIN)
+      throw new Error("No autorizado");
+
+    const token = signToken({
+      userId: userAuth.user.id,
+      role: "admin",
+      username: userAuth.user.username,
+    });
+
+    const session = await prisma.userSession.create({
+      data: { userId: userAuth.user.id },
+    });
+
+    return { token, sessionId: session.id, userId: userAuth.user.id };
+  }
+
+  /** ================== CAREGIVER ================== */
+
+  async registerCaregiver({ email, username, password }) {
+    if (!email || !username || !password) throw new Error("Campos requeridos");
+
+    if (await prisma.userAuth.findUnique({ where: { email } })) {
+      throw new Error("Email ya registrado");
+    }
+    if (await prisma.user.findUnique({ where: { username } })) {
+      throw new Error("Username ya usado");
+    }
+
+    const { hash, salt } = await hashPassword(password);
+
+    await prisma.user.create({
+      data: {
+        username,
+        roleId: ROLE_IDS.CAREGIVER,
+        isActive: false,
+        auth: {
+          create: {
+            email,
+            passwordHash: hash,
+            passwordSalt: salt,
+            emailConfirmed: false,
+          },
+        },
+      },
+    });
+
+    const otp = generateOTP();
+    const expiresAt = new Date(Date.now() + OTP_TTL_MS);
+
+    await prisma.oTP.upsert({
+      where: { email },
+      update: { otp, expiresAt, createdAt: new Date() },
+      create: { email, otp, expiresAt, createdAt: new Date() },
+    });
+
+    await sendOTPEmail(email, otp);
+
+    return { message: "OTP enviado", email };
+  }
+
+  async verifyOTP({ email, otp }) {
+    const record = await prisma.oTP.findUnique({ where: { email } });
+    if (!record) throw new Error("OTP no encontrado");
+    if (record.otp !== otp) throw new Error("OTP inválido");
+    if (record.expiresAt < new Date()) throw new Error("OTP expirado");
+
+    const userAuth = await prisma.userAuth.findUnique({
+      where: { email },
+      include: { user: true },
+    });
+    if (!userAuth) throw new Error("Usuario no encontrado");
+
+    await prisma.user.update({
+      where: { id: userAuth.userId },
+      data: { isActive: true },
+    });
+    await prisma.userAuth.update({
+      where: { email },
+      data: { emailConfirmed: true },
+    });
+    await prisma.oTP.delete({ where: { email } });
+
+    const token = signToken({
+      userId: userAuth.userId,
+      role: "caregiver",
+      username: userAuth.user.username,
+    });
+
+    return { token, userId: userAuth.userId };
+  }
+
+  async loginCaregiver({ email, password }) {
+    const userAuth = await prisma.userAuth.findUnique({
+      where: { email },
+      include: { user: true },
+    });
+    if (!userAuth) throw new Error("Credenciales inválidas");
+    if (!userAuth.emailConfirmed) throw new Error("Email no confirmado");
+
+    const valid = await comparePassword(
+      password,
+      userAuth.passwordHash,
+      userAuth.passwordSalt
+    );
+    if (!valid) throw new Error("Credenciales inválidas");
+
+    const token = signToken({
+      userId: userAuth.userId,
+      role: "caregiver",
+      username: userAuth.user.username,
+    });
+
+    const session = await prisma.userSession.create({
+      data: { userId: userAuth.userId },
+    });
+
+    return { token, sessionId: session.id, userId: userAuth.userId };
+  }
+
+  /** ================== LOGOUT & OTP ================== */
+
+  async logout(sessionId) {
+    await prisma.userSession.update({
+      where: { id: sessionId },
+      data: { endedAt: new Date() },
+    });
+    return { message: "Sesión cerrada" };
+  }
+
+  async resendOTP({ email }) {
+    const user = await prisma.userAuth.findUnique({ where: { email } });
+    if (!user) throw new Error("Email no registrado");
+
+    const otp = generateOTP();
+    const expiresAt = new Date(Date.now() + OTP_TTL_MS);
+
+    await prisma.oTP.upsert({
+      where: { email },
+      update: { otp, expiresAt, createdAt: new Date() },
+      create: { email, otp, expiresAt, createdAt: new Date() },
+    });
+
+    await sendOTPEmail(email, otp);
+    return { message: "OTP reenviado", email };
+  }
+
+  async requestPasswordOTP(email) {
+    const userAuth = await prisma.userAuth.findUnique({ where: { email } });
+    if (!userAuth) throw new Error("Email no registrado");
+
+    const otp = generateOTP();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 min
+
+    await prisma.OTP.upsert({
+      where: { email },
+      update: {
+        otp,
+        expiresAt,
+        createdAt: new Date(),
+      },
+      create: {
+        email,
+        otp,
+        expiresAt,
+        createdAt: new Date(),
+      },
+    });
+
+    await sendOTPEmail(email, otp);
+    return { message: "OTP enviado al correo" };
+  }
+
+  async resetPasswordWithOTP(email, otp, newPassword) {
+    const record = await prisma.OTP.findUnique({ where: { email } });
+    if (!record) throw new Error("OTP no encontrado");
+    if (record.otp !== otp) throw new Error("OTP incorrecto");
+    if (record.expiresAt < new Date()) throw new Error("OTP expirado");
+
+    const { hash, salt } = await hashPassword(newPassword);
+
+    await prisma.userAuth.update({
+      where: { email },
+      data: { passwordHash: hash, passwordSalt: salt },
+    });
+
+    await prisma.OTP.delete({ where: { email } });
+
+    return { message: "Contraseña actualizada correctamente" };
+  }
+
+  // Obtener perfil del usuario logueado
+  async getProfile(userId) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        auth: true, // email
+        role: true, // rol
+      },
+    });
+
+    if (!user) throw new Error("Usuario no encontrado");
+
+    return {
       id: user.id,
       username: user.username,
-      email: user.email,
-      role: user.role,
-    },
-  };
-};
-
-export const logout = async () => {
-  return { msg: "Logout exitoso, elimina el token en el cliente" };
-};
+      email: user.auth?.email || null,
+      role: user.role.name,
+      gender: user.gender,
+      age: user.age,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+  }
+}

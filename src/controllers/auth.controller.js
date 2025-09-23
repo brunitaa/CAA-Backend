@@ -1,127 +1,56 @@
-import prisma from "../db.js";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
+import { AuthService, ROLE_IDS } from "../services/auth.service.js";
 
-// Registro (auto-registro o admin)
-export const register = async (req, res) => {
+const authService = new AuthService();
+
+/** ================== ADMIN ================== */
+
+// Registrar Admin (requiere JWT de otro Admin)
+export const registerAdmin = async (req, res) => {
   try {
-    const { username, password, role, email } = req.body;
+    const creatorId = req.user.userId;
 
-    const existingUser = await prisma.user.findFirst({ where: { username } });
-    if (existingUser)
-      return res.status(400).json({ message: "El username ya está en uso" });
+    const { email, username, password } = req.body;
 
-    if (email) {
-      const existingEmail = await prisma.user.findFirst({ where: { email } });
-      if (existingEmail)
-        return res.status(400).json({ message: "El email ya está en uso" });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const user = await prisma.user.create({
-      data: {
-        username,
-        password: hashedPassword,
-        role: role || "usuario",
-        email,
-      },
+    const result = await authService.registerAdmin({
+      email,
+      username,
+      password,
+      creatorId,
     });
-
-    res.status(201).json({
-      message: "Usuario registrado correctamente",
-      user: {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-        email: user.email,
-      },
-    });
-  } catch (error) {
-    console.error("Error en register:", error);
-    res
-      .status(500)
-      .json({ message: "Error en register", error: error.message });
+    res.status(201).json(result);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
   }
 };
 
-// Crear usuario móvil (solo admin)
-export const createMobileUser = async (req, res) => {
+// Verificar OTP Admin
+export const verifyAdminOTP = async (req, res) => {
   try {
-    const { username, password, email, role } = req.body;
+    const { email, otp } = req.body;
+    const result = await authService.verifyAdminOTP({ email, otp });
 
-    // Validación básica
-    if (!username || !password)
-      return res
-        .status(400)
-        .json({ message: "Username y password son requeridos" });
-
-    // Verificar si username existe
-    const existingUser = await prisma.user.findFirst({ where: { username } });
-    if (existingUser)
-      return res.status(400).json({ message: "El username ya está en uso" });
-
-    // Verificar si email existe solo si se proporciona
-    if (email) {
-      const existingEmail = await prisma.user.findFirst({ where: { email } });
-      if (existingEmail)
-        return res.status(400).json({ message: "El email ya está en uso" });
-    }
-
-    // Hashear la contraseña
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Crear usuario con rol "usuario" (por defecto)
-    const user = await prisma.user.create({
-      data: {
-        username,
-        password: hashedPassword,
-        role: role || "usuario",
-        email: email || null, // email opcional
-      },
+    res.cookie("token", result.token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 días
     });
 
-    // Devolver credenciales para que el admin se las entregue al usuario móvil
-    res.status(201).json({
-      message: "Usuario móvil creado correctamente",
-      user: {
-        username: user.username,
-        password, // la contraseña en claro para entregar al usuario
-        email: user.email,
-        role: user.role,
-      },
-    });
-  } catch (error) {
-    console.error("Error en createMobileUser:", error);
-    res
-      .status(500)
-      .json({ message: "Error al crear usuario móvil", error: error.message });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
   }
 };
 
-// Login
-export const login = async (req, res) => {
+// Login Admin
+export const loginAdmin = async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { email, password } = req.body;
+    const { token, sessionId, userId } = await authService.loginAdmin({
+      email,
+      password,
+    });
 
-    // Buscar usuario por username
-    const user = await prisma.user.findFirst({ where: { username } });
-    if (!user)
-      return res.status(404).json({ message: "Usuario no encontrado" });
-
-    // Verificar contraseña
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid)
-      return res.status(401).json({ message: "Contraseña incorrecta" });
-
-    // Generar token JWT
-    const token = jwt.sign(
-      { id: user.id, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: "1d" }
-    );
-
-    // Enviar cookie
     res.cookie("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -129,49 +58,178 @@ export const login = async (req, res) => {
       maxAge: 24 * 60 * 60 * 1000,
     });
 
-    res.json({
-      message: "Login exitoso",
-      user: {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-        email: user.email,
-      },
-    });
-  } catch (error) {
-    console.error("Error en login:", error);
-    res.status(500).json({ message: "Error en login", error: error.message });
+    res.json({ message: "Login exitoso", sessionId, userId });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
   }
 };
 
-// Logout
-export const logout = async (req, res) => {
-  res.clearCookie("token");
-  res.json({ message: "Logout exitoso" });
-};
+/** ================== CAREGIVER ================== */
 
-// Perfil
-export const getProfile = async (req, res) => {
+// 📌 Registrar Caregiver
+export const registerCaregiver = async (req, res) => {
   try {
-    const user = await prisma.user.findFirst({
-      where: { id: req.user.id },
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        role: true,
-        createdAt: true,
-      },
+    const { email, username, password } = req.body;
+
+    const result = await authService.registerCaregiver({
+      email,
+      username,
+      password,
     });
 
-    if (!user)
-      return res.status(404).json({ message: "Usuario no encontrado" });
+    res.status(201).json(result);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
 
-    res.json({ user });
-  } catch (error) {
-    console.error("Error al obtener perfil:", error);
-    res
-      .status(500)
-      .json({ message: "Error al obtener perfil", error: error.message });
+// 📌 Verificar OTP (Caregiver)
+export const verifyOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    const result = await authService.verifyOTP({ email, otp });
+
+    res.cookie("token", result.token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 días
+    });
+
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+// 📌 Login Caregiver
+export const loginCaregiver = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    const { token, sessionId, userId } = await authService.loginCaregiver({
+      email,
+      password,
+    });
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 24 * 60 * 60 * 1000, // 1 día
+    });
+
+    res.json({ message: "Login exitoso", sessionId, userId });
+  } catch (err) {
+    res.status(401).json({ message: err.message });
+  }
+};
+
+/** ================== SPEAKER ================== */
+
+// 📌 Crear Speaker (solo un Caregiver puede hacerlo)
+export const createSpeaker = async (req, res) => {
+  try {
+    if (req.user.role !== "caregiver") {
+      return res
+        .status(403)
+        .json({ message: "Solo un Caregiver puede crear Speakers" });
+    }
+
+    const caregiverId = req.user.userId;
+    const { username, gender, age } = req.body;
+
+    const result = await authService.createSpeaker(
+      { username, gender, age },
+      caregiverId
+    );
+
+    res.status(201).json(result);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+// 📌 Seleccionar Speaker (solo un Caregiver puede hacerlo)
+export const selectSpeaker = async (req, res) => {
+  try {
+    if (req.user.role !== "caregiver") {
+      return res
+        .status(403)
+        .json({ message: "Solo un Caregiver puede seleccionar Speakers" });
+    }
+
+    const caregiverId = req.user.userId;
+    const { speakerId } = req.body;
+
+    const result = await authService.selectSpeaker({ caregiverId, speakerId });
+
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+/** ================== LOGOUT ================== */
+
+// 📌 Logout (Admin o Caregiver)
+export const logout = async (req, res) => {
+  try {
+    const sessionId = req.sessionId;
+    const result = await authService.logout(sessionId);
+
+    res.clearCookie("token");
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+/** ================== OTP ================== */
+
+// 📌 Reenviar OTP a Caregiver
+export const resendOTP = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    const result = await authService.resendOTP({ email });
+
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+export const requestPasswordOTP = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const result = await authService.requestPasswordOTP(email);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+export const resetPasswordWithOTP = async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    const result = await authService.resetPasswordWithOTP(
+      email,
+      otp,
+      newPassword
+    );
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+export const getProfile = async (req, res) => {
+  try {
+    const userId = req.user.userId; // JWT contiene userId
+    const profile = await authService.getProfile(userId);
+    res.json(profile);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
   }
 };
