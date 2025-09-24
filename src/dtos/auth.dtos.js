@@ -2,11 +2,6 @@
 import { z } from "zod";
 
 const passwordRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{7,}$/;
-// explanation:
-// - at least one uppercase
-// - at least one digit
-// - at least one special character (non-alphanumeric)
-// - length >= 7 (i.e., >6)
 
 export const RegisterSchema = z.object({
   email: z.string().email(),

@@ -6,7 +6,7 @@ import { uploadImage } from "../middlewares/upload.middleware.js";
 const router = express.Router();
 
 router.post(
-  "/",
+  "/create",
   verifyToken,
   authorizeRole(["admin", "caregiver"]),
   uploadImage.single("imageFile"),
@@ -14,7 +14,7 @@ router.post(
 );
 
 router.put(
-  "/:id",
+  "/edit/:id",
   verifyToken,
   authorizeRole(["admin", "caregiver"]),
   uploadImage.single("imageFile"), // multer
@@ -22,7 +22,7 @@ router.put(
 );
 
 router.delete(
-  "/:id",
+  "/delete/:id",
   verifyToken,
   authorizeRole(["admin", "caregiver"]),
   pictogramController.deletePictogram

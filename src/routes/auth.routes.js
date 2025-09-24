@@ -1,6 +1,6 @@
 import express from "express";
 import * as authController from "../controllers/auth.controller.js";
-import { authorizeRole, verifyToken } from "../middlewares/auth.middleware.js";
+import { verifyToken, authorizeRole } from "../middlewares/auth.middleware.js";
 import {
   requestPasswordOTP,
   resetPasswordWithOTP,
@@ -9,6 +9,13 @@ import {
 
 const router = express.Router();
 
+router.get("/validate", verifyToken, (req, res) => {
+  // Si pasó el middleware, el token es válido
+  res.json({
+    valid: true,
+    user: req.user, // { userId, role, ... }
+  });
+});
 router.post("/request-password-otp", requestPasswordOTP);
 router.post("/reset-password-otp", resetPasswordWithOTP);
 router.get("/profile", verifyToken, getProfile);
@@ -20,20 +27,6 @@ router.post("/verify-otp", authController.verifyOTP);
 // Reenvío de OTP
 router.post("/resend-otp", authController.resendOTP);
 router.post("/caregiver/login", authController.loginCaregiver);
-
-// Crear Speaker (solo Caregiver)
-router.post(
-  "/speaker",
-  authorizeRole(["caregiver"]),
-  authController.createSpeaker
-);
-
-// Seleccionar Speaker (solo Caregiver)
-router.post(
-  "/speaker/select",
-  authorizeRole(["caregiver"]),
-  authController.selectSpeaker
-);
 
 // Logout (Caregiver o Speaker)
 router.post(

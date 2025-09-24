@@ -1,11 +1,3 @@
-// utils/serialize.js
-
-/**
- * Convierte BigInt a string en un objeto JSON para evitar errores
- * al enviar datos de Prisma a clientes como Postman.
- * @param {any} obj
- * @returns {any}
- */
 export function serializeBigInt(obj) {
   return JSON.parse(
     JSON.stringify(obj, (key, value) =>
@@ -13,3 +5,23 @@ export function serializeBigInt(obj) {
     )
   );
 }
+export const attachFullImageUrl = (
+  pictogram,
+  host = "http://localhost:3000"
+) => {
+  if (!pictogram) return null;
+
+  const newPicto = { ...pictogram };
+  if (pictogram.image?.url) {
+    newPicto.image = {
+      ...pictogram.image,
+      fullUrl: `${host}${pictogram.image.url}`,
+    };
+  }
+  return newPicto;
+};
+
+export const attachFullImageUrlArray = (
+  pictograms,
+  host = "http://localhost:3000"
+) => pictograms.map((p) => attachFullImageUrl(p, host));

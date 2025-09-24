@@ -3,49 +3,73 @@ import prisma from "../lib/prisma.js";
 
 export class GridRepository {
   async createGrid(data) {
-    return prisma.grid.create({ data });
+    try {
+      return await prisma.grid.create({ data });
+    } catch (err) {
+      throw new Error("Error en repositorio creando grid: " + err.message);
+    }
   }
 
-  async findById(id) {
-    return prisma.grid.findUnique({ where: { id } });
+  async findGridById(id) {
+    try {
+      return await prisma.grid.findUnique({ where: { id } });
+    } catch (err) {
+      throw new Error("Error buscando grid: " + err.message);
+    }
   }
 
   async addPictogram(gridId, pictogramId) {
-    return prisma.gridPictogram.create({
-      data: { gridId, pictogramId, position: 0 }, // posición inicial, se puede mejorar
-    });
+    try {
+      return await prisma.gridPictogram.create({
+        data: { gridId, pictogramId, position: 0 },
+      });
+    } catch (err) {
+      throw new Error("Error asignando pictograma al grid: " + err.message);
+    }
   }
 
   async getAllGrids() {
-    return prisma.grid.findMany({
-      where: { isActive: true },
-    });
+    try {
+      return await prisma.grid.findMany({
+        where: { isActive: true },
+      });
+    } catch (err) {
+      throw new Error("Error obteniendo grids: " + err.message);
+    }
   }
 
   async getGridsByUserIds(userIds) {
-    return prisma.grid.findMany({
-      where: {
-        isActive: true,
-        userId: { in: userIds },
-      },
-    });
+    try {
+      return await prisma.grid.findMany({
+        where: {
+          isActive: true,
+          userId: { in: userIds },
+        },
+      });
+    } catch (err) {
+      throw new Error("Error obteniendo grids de usuarios: " + err.message);
+    }
   }
 
   async updateGrid(id, data) {
-    return prisma.grid.update({
-      where: { id },
-      data,
-    });
+    try {
+      return await prisma.grid.update({
+        where: { id },
+        data,
+      });
+    } catch (err) {
+      throw new Error("Error actualizando grid: " + err.message);
+    }
   }
 
   async softDeleteGrid(id) {
-    // Aquí hacemos el soft delete correctamente
-    return prisma.grid.update({
-      where: { id },
-      data: {
-        isActive: false,
-        deletedAt: new Date(),
-      },
-    });
+    try {
+      return await prisma.grid.update({
+        where: { id },
+        data: { isActive: false, deletedAt: new Date() },
+      });
+    } catch (err) {
+      throw new Error("Error eliminando grid: " + err.message);
+    }
   }
 }

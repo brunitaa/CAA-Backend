@@ -8,7 +8,7 @@ async function main() {
     await connectDB();
     app.listen(process.env.PORT, () => {
       console.log(
-        `BRUNA ESTA CORRIENDO EN EL PUERTO http://localhost:${process.env.PORT}`
+        `EL PROYECTO ESTA CORRIENDO EN http://localhost:${process.env.PORT}`
       );
     });
   } catch (error) {

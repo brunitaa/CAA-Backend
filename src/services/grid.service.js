@@ -14,8 +14,8 @@ export class GridService {
       return gridRepo.createGrid({
         name,
         description,
-        userId: user.userId, // Admin como creador
         isGlobal: true,
+        userId: null, // global
       });
     }
 
@@ -33,12 +33,12 @@ export class GridService {
       return gridRepo.createGrid({
         name,
         description,
-        userId: speakerId,
         isGlobal: false,
+        userId: speakerId,
       });
     }
 
-    throw new Error("No autorizado para crear grids");
+    throw new Error("Rol no autorizado para crear grids");
   }
 
   async getGrids(user) {

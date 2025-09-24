@@ -1,4 +1,3 @@
-// src/utils/hash.js
 import crypto from "crypto";
 
 // Generar hash de contraseña

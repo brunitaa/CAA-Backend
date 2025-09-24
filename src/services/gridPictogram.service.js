@@ -1,4 +1,3 @@
-// services/gridPictogram.service.js
 import { GridPictogramRepository } from "../repositories/gridPictogram.repository.js";
 import { GridRepository } from "../repositories/grid.repository.js";
 import { PictogramRepository } from "../repositories/pictogram.repository.js";
@@ -10,42 +9,72 @@ const gridPictogramRepo = new GridPictogramRepository();
 const caregiverSpeakerRepo = new CaregiverSpeakerRepository();
 
 export class GridPictogramService {
-  async addPictogramToGrid(user, gridId, pictogramId) {
-    const grid = await gridRepo.findGridById(gridId);
-    const pictogram = await pictogramRepo.findPictogramById(pictogramId);
+  // Agregar pictogramas a grids (acepta arrays)
+  async addPictogramToGrid(user, gridIdsInput, pictogramIdsInput) {
+    const gridIds = Array.isArray(gridIdsInput) ? gridIdsInput : [gridIdsInput];
+    const pictogramIds = Array.isArray(pictogramIdsInput)
+      ? pictogramIdsInput
+      : [pictogramIdsInput];
 
-    if (!grid || !grid.isActive) throw new Error("Grid no encontrado");
-    if (!pictogram || !pictogram.isActive)
-      throw new Error("Pictograma no encontrado");
-
-    // Admin puede agregar cualquier pictograma a cualquier grid
-    if (user.role === "admin") {
-      const position = await gridPictogramRepo.getPosition(gridId);
-      return gridPictogramRepo.addPictogram(gridId, pictogramId, position);
+    // Validar grids
+    const grids = [];
+    for (const gridId of gridIds) {
+      const grid = await gridRepo.findGridById(gridId);
+      if (!grid || !grid.isActive) throw new Error(`Grid ${gridId} no válido`);
+      grids.push(grid);
     }
 
-    // Caregiver solo si controla el speaker dueño del grid y del pictograma
-    if (user.role === "caregiver") {
-      const caregiverGridRelation = await caregiverSpeakerRepo.exists(
-        user.userId,
-        grid.userId
-      );
-      const caregiverPictogramRelation = await caregiverSpeakerRepo.exists(
-        user.userId,
-        pictogram.userId
-      );
+    // Validar pictogramas
+    const pictograms = [];
+    for (const pictogramId of pictogramIds) {
+      const pictogram = await pictogramRepo.findPictogramById(pictogramId);
+      if (!pictogram || !pictogram.isActive)
+        throw new Error(`Pictograma ${pictogramId} no encontrado`);
+      pictograms.push(pictogram);
+    }
 
-      if (!caregiverGridRelation || !caregiverPictogramRelation) {
-        throw new Error(
-          "No tienes permiso para agregar este pictograma a este grid"
+    const results = [];
+
+    for (const grid of grids) {
+      for (const pictogram of pictograms) {
+        // 🔒 Validación de permisos SOLO contra speakerId
+        if (user.role === "caregiver") {
+          const gridSpeakerId = grid.userId; // siempre es speakerId
+          const pictogramSpeakerId = pictogram.userId; // siempre es speakerId
+
+          const allowedGrid = await caregiverSpeakerRepo.exists(
+            user.userId,
+            gridSpeakerId
+          );
+          const allowedPictogram = await caregiverSpeakerRepo.exists(
+            user.userId,
+            pictogramSpeakerId
+          );
+
+          if (!allowedGrid || !allowedPictogram) {
+            throw new Error(
+              `No tienes permiso para agregar el ptictograma ${pictogram.id} al grid ${grid.id}`
+            );
+          }
+        }
+
+        // Verificar si ya existe
+        const exists = await gridPictogramRepo.exists(grid.id, pictogram.id);
+        if (exists) continue;
+
+        // Obtener la posición siguiente
+        const position = await gridPictogramRepo.getNextPosition(grid.id);
+
+        const gp = await gridPictogramRepo.addPictogram(
+          grid.id,
+          pictogram.id,
+          position
         );
+        results.push(gp);
       }
-
-      const position = await gridPictogramRepo.getPosition(gridId);
-      return gridPictogramRepo.addPictogram(gridId, pictogramId, position);
     }
 
-    throw new Error("Rol no autorizado");
+    return results;
   }
 
   async removePictogramFromGrid(user, gridId, pictogramId) {
@@ -56,48 +85,43 @@ export class GridPictogramService {
     if (!pictogram || !pictogram.isActive)
       throw new Error("Pictograma no encontrado");
 
-    if (user.role === "admin")
-      return gridPictogramRepo.removePictogram(gridId, pictogramId);
-
     if (user.role === "caregiver") {
-      const caregiverGridRelation = await caregiverSpeakerRepo.exists(
+      const gridSpeakerId = grid.userId;
+      const pictogramSpeakerId = pictogram.userId;
+
+      const allowedGrid = await caregiverSpeakerRepo.exists(
         user.userId,
-        grid.userId
+        gridSpeakerId
       );
-      const caregiverPictogramRelation = await caregiverSpeakerRepo.exists(
+      const allowedPictogram = await caregiverSpeakerRepo.exists(
         user.userId,
-        pictogram.userId
+        pictogramSpeakerId
       );
 
-      if (!caregiverGridRelation || !caregiverPictogramRelation) {
+      if (!allowedGrid || !allowedPictogram) {
         throw new Error(
           "No tienes permiso para eliminar este pictograma de este grid"
         );
       }
-
-      return gridPictogramRepo.removePictogram(gridId, pictogramId);
     }
 
-    throw new Error("Rol no autorizado");
+    return gridPictogramRepo.removePictogramFromGrid(gridId, pictogramId);
   }
 
   async listPictogramsByGrid(user, gridId) {
     const grid = await gridRepo.findGridById(gridId);
     if (!grid || !grid.isActive) throw new Error("Grid no encontrado");
 
-    if (user.role === "admin")
-      return gridPictogramRepo.getPictogramsByGrid(gridId);
-
     if (user.role === "caregiver") {
-      const caregiverGridRelation = await caregiverSpeakerRepo.exists(
+      const gridSpeakerId = grid.userId;
+      const allowed = await caregiverSpeakerRepo.exists(
         user.userId,
-        grid.userId
+        gridSpeakerId
       );
-      if (!caregiverGridRelation)
-        throw new Error("No tienes permiso para ver este grid");
-      return gridPictogramRepo.getPictogramsByGrid(gridId);
+
+      if (!allowed) throw new Error("No tienes permiso para ver este gridrrr");
     }
 
-    throw new Error("Rol no autorizado");
+    return gridPictogramRepo.getPictogramsByGrid(gridId);
   }
 }
