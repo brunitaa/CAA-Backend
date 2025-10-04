@@ -1,38 +1,45 @@
 import express from "express";
-import * as authController from "../controllers/auth.controller.js";
 import { verifyToken, authorizeRole } from "../middlewares/auth.middleware.js";
 import {
-  requestPasswordOTP,
-  resetPasswordWithOTP,
+  registerAdmin,
+  verifyAdminToken,
+  loginAdmin,
+  registerCaregiver,
+  verifyTokenCaregiver,
+  loginCaregiver,
+  logout,
+  requestPasswordToken,
+  resetPasswordWithToken,
   getProfile,
 } from "../controllers/auth.controller.js";
 
 const router = express.Router();
 
+// Admin
+router.post("/register-admin", registerAdmin);
+router.post("/verify-token-admin", verifyAdminToken);
+router.post("/admin/login", loginAdmin);
+
+// Caregiver
+router.post("/register-caregiver", registerCaregiver);
+router.post("/verify-token-caregiver", verifyTokenCaregiver);
+router.post("/caregiver/login", loginCaregiver);
+
+// Password reset
+router.post("/request-password-token", requestPasswordToken);
+router.post("/reset-password-token", resetPasswordWithToken);
+
+// Perfil y validación
 router.get("/validate", verifyToken, (req, res) => {
-  // Si pasó el middleware, el token es válido
   res.json({
     valid: true,
-    user: req.user, // { userId, role, ... }
+    user: req.user,
   });
 });
-router.post("/request-password-otp", requestPasswordOTP);
-router.post("/reset-password-otp", resetPasswordWithOTP);
+
 router.get("/profile", verifyToken, getProfile);
-// Caregiver login
-router.post("/register-caregiver", authController.registerCaregiver);
-// Verificación de OTP
-router.post("/verify-otp", authController.verifyOTP);
 
-// Reenvío de OTP
-router.post("/resend-otp", authController.resendOTP);
-router.post("/caregiver/login", authController.loginCaregiver);
-
-// Logout (Caregiver o Speaker)
-router.post(
-  "/logout",
-  authorizeRole(["caregiver", "admin"]),
-  authController.logout
-);
+// Logout (Caregiver o Admin)
+router.post("/logout", authorizeRole(["caregiver", "admin"]), logout);
 
 export default router;

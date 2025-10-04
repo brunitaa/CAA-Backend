@@ -1,8 +1,8 @@
 import { SpeakerService } from "../services/speaker.service.js";
-import prisma from "../lib/prisma.js";
 
 const speakerService = new SpeakerService();
 
+// Crear speaker
 export const createSpeaker = async (req, res) => {
   try {
     const caregiverId = req.user.userId;
@@ -19,6 +19,7 @@ export const createSpeaker = async (req, res) => {
   }
 };
 
+// Seleccionar speaker (generar token/session)
 export const selectSpeaker = async (req, res) => {
   try {
     const caregiverId = req.user.userId;
@@ -34,6 +35,7 @@ export const selectSpeaker = async (req, res) => {
   }
 };
 
+// Obtener speakers de un caregiver
 export const getSpeakersByCaregiver = async (req, res) => {
   try {
     if (req.user.role !== "caregiver") {
@@ -41,28 +43,10 @@ export const getSpeakersByCaregiver = async (req, res) => {
     }
 
     const caregiverId = req.user.userId;
-
-    const relations = await prisma.caregiverSpeaker.findMany({
-      where: { caregiverId },
-      include: {
-        speaker: {
-          select: {
-            id: true,
-            username: true,
-            gender: true,
-            age: true,
-            isActive: true,
-            createdAt: true,
-          },
-        },
-      },
-    });
-
-    const speakers = relations.map((r) => r.speaker);
-
+    const speakers = await speakerService.getSpeakersByCaregiver(caregiverId);
     res.json({ speakers });
   } catch (err) {
-    console.error("❌ Error en getSpeakersByCaregiver:", err);
+    console.error(err);
     res.status(500).json({ message: "Error interno del servidor" });
   }
 };

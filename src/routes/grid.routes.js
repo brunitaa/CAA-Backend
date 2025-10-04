@@ -6,6 +6,8 @@ import {
   getGridById,
   updateGrid,
   deleteGrid,
+  getArchivedGrids,
+  restoreGrid,
 } from "../controllers/grid.controller.js";
 import { verifyToken } from "../middlewares/auth.middleware.js";
 
@@ -14,10 +16,14 @@ const router = express.Router();
 // Todas las rutas requieren token
 router.use(verifyToken);
 
-router.post("/", createGrid);
+router.post("/create", createGrid);
 router.get("/", getGrids);
 router.get("/:id", getGridById);
-router.put("/:id", updateGrid);
-router.delete("/:id", deleteGrid);
+router.put("/edit/:id", updateGrid);
+router.delete("/delete/:id", deleteGrid);
+
+// Rutas para grids archivados
+router.get("/archived/all", getArchivedGrids);
+router.patch("/restore/:id", restoreGrid);
 
 export default router;

@@ -14,8 +14,8 @@ const transporter = nodemailer.createTransport({
 // Verificar conexión al iniciar (opcional)
 transporter
   .verify()
-  .then(() => console.log("✅ SMTP (Gmail) conectado correctamente"))
-  .catch((err) => console.error("❌ Error conectando SMTP:", err));
+  .then(() => console.log("SMTP (Gmail) conectado correctamente"))
+  .catch((err) => console.error(" Error conectando SMTP:", err));
 
 export const sendOTPEmail = async (to, otp) => {
   const info = await transporter.sendMail({

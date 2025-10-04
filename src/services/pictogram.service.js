@@ -1,19 +1,21 @@
+import prisma from "../lib/prisma.js";
 import { PictogramRepository } from "../repositories/pictogram.repository.js";
 import { ImageRepository } from "../repositories/image.repository.js";
-import prisma from "../lib/prisma.js";
 
 const pictogramRepo = new PictogramRepository();
 const imageRepo = new ImageRepository();
 
 export class PictogramService {
-  // Crear pictograma
-  async createPictogram(user, { name, imageFile, posId }) {
+  async createPictogram(user, { name, imageFile, posId, semanticIds = [] }) {
     if (!name) throw new Error("El nombre del pictograma es requerido");
     if (!posId) throw new Error("Debe asignarse un Part of Speech (POS)");
 
-    let imageId = null;
+    // Verificar POS
+    const pos = await prisma.partOfSpeech.findUnique({ where: { id: posId } });
+    if (!pos) throw new Error("POS no encontrado");
 
-    // Crear la imagen si se envió
+    // Crear imagen si se envió
+    let imageId = null;
     if (imageFile) {
       const image = await imageRepo.createImage({
         url: `/uploads/images/${imageFile.filename}`,
@@ -26,45 +28,53 @@ export class PictogramService {
 
     const isAdmin = user.role === "admin";
 
-    // Crear el pictograma con el imageId
-    const pictogram = await pictogramRepo.createPictogram({
-      name,
-      imageId,
-      userId: isAdmin ? null : user.userId,
-      createdBy: user.userId,
-      isActive: true,
-    });
-
-    // Crear relación con POS
-    await prisma.pictogramPos.create({
+    // Crear pictograma con POS anidado
+    const pictogram = await prisma.pictogram.create({
       data: {
-        pictogramId: pictogram.id,
-        posId,
-        isPrimary: true,
-        confidence: 1,
+        name,
+        imageId,
+        userId: isAdmin ? null : user.userId,
+        createdBy: user.userId,
+        isActive: true,
+        pictogramPos: {
+          create: {
+            posId,
+            isPrimary: true,
+            confidence: 1,
+          },
+        },
+        semantic: semanticIds.length
+          ? {
+              createMany: {
+                data: semanticIds.map((categoryId) => ({ categoryId })),
+                skipDuplicates: true,
+              },
+            }
+          : undefined,
+      },
+      include: {
+        image: true,
+        pictogramPos: { include: { pos: true } },
+        semantic: { include: { category: true } },
       },
     });
 
-    return pictogramRepo.findById(pictogram.id);
+    return pictogram;
   }
 
-  // Editar pictograma
-  async updatePictogram(user, pictogramId, { name, imageFile, posId }) {
+  async updatePictogram(
+    user,
+    pictogramId,
+    { name, imageFile, posId, semanticIds }
+  ) {
     const pictogram = await pictogramRepo.findById(pictogramId);
-    if (!pictogram || !pictogram.isActive) {
+    if (!pictogram || !pictogram.isActive)
       throw new Error("Pictograma no encontrado");
-    }
 
-    // Regla: caregiver no puede editar pictogramas globales
-    if (
-      user.role === "caregiver" &&
-      (!pictogram.userId || pictogram.userId !== user.userId)
-    ) {
+    if (user.role === "caregiver" && pictogram.userId !== user.userId)
       throw new Error("No autorizado para editar este pictograma");
-    }
 
     let newImageId = pictogram.imageId;
-
     if (imageFile) {
       const image = await imageRepo.createImage({
         url: `/uploads/images/${imageFile.filename}`,
@@ -75,19 +85,22 @@ export class PictogramService {
       newImageId = image.id;
     }
 
-    const updatedPictogram = await pictogramRepo.updatePictogram(pictogramId, {
+    const updatedData = {
       name: name || pictogram.name,
       imageId: newImageId,
       updatedAt: new Date(),
-    });
+    };
 
     // Actualizar POS si se envió
     if (posId) {
-      // Verificar si ya existe relación
+      const pos = await prisma.partOfSpeech.findUnique({
+        where: { id: posId },
+      });
+      if (!pos) throw new Error("POS no encontrado");
+
       const existingPOS = await prisma.pictogramPos.findFirst({
         where: { pictogramId },
       });
-
       if (existingPOS) {
         await prisma.pictogramPos.update({
           where: { id: existingPOS.id },
@@ -100,115 +113,83 @@ export class PictogramService {
       }
     }
 
-    return pictogramRepo.findById(pictogramId);
+    // Actualizar semántica si se envió
+    if (Array.isArray(semanticIds)) {
+      await prisma.pictogramSemantic.deleteMany({ where: { pictogramId } });
+
+      if (semanticIds.length > 0) {
+        await prisma.pictogramSemantic.createMany({
+          data: semanticIds.map((categoryId) => ({
+            pictogramId,
+            categoryId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    }
+
+    return pictogramRepo.updatePictogram(pictogramId, updatedData);
   }
 
-  // Eliminación lógica
   async softDeletePictogram(user, pictogramId) {
     const pictogram = await pictogramRepo.findById(pictogramId);
-    if (!pictogram || !pictogram.isActive) {
+    if (!pictogram || !pictogram.isActive)
       throw new Error("Pictograma no encontrado");
-    }
 
-    // Regla: caregiver no puede eliminar pictogramas globales
-    if (
-      user.role === "caregiver" &&
-      (!pictogram.userId || pictogram.userId !== user.userId)
-    ) {
+    if (user.role === "caregiver" && pictogram.userId !== user.userId)
       throw new Error("No autorizado para eliminar este pictograma");
-    }
+
+    return pictogramRepo.softDeletePictogram(pictogramId);
+  }
+
+  async restorePictogram(user, pictogramId) {
+    const pictogram = await pictogramRepo.findById(pictogramId);
+    if (!pictogram) throw new Error("Pictograma no encontrado");
+
+    if (user.role === "caregiver" && pictogram.userId !== user.userId)
+      throw new Error("No autorizado para restaurar este pictograma");
 
     return pictogramRepo.updatePictogram(pictogramId, {
-      isActive: false,
-      deletedAt: new Date(),
+      isActive: true,
+      deletedAt: null,
+      updatedAt: new Date(),
     });
   }
 
-  // Obtener pictograma por ID
+  async getAllPictograms(user) {
+    if (user.role === "admin") return pictogramRepo.getAllPictograms();
+
+    return prisma.pictogram.findMany({
+      where: { isActive: true, userId: user.userId },
+      include: {
+        pictogramPos: { include: { pos: true } },
+        semantic: { include: { category: true } },
+        image: true,
+      },
+    });
+  }
+
   async getPictogramById(user, pictogramId) {
     const pictogram = await pictogramRepo.findById(pictogramId);
-    if (!pictogram || !pictogram.isActive) {
+    if (!pictogram || !pictogram.isActive)
       throw new Error("Pictograma no encontrado");
-    }
 
-    // Caregiver solo puede ver pictogramas propios
-    if (
-      user.role === "caregiver" &&
-      (!pictogram.userId || pictogram.userId !== user.userId)
-    ) {
+    if (user.role === "caregiver" && pictogram.userId !== user.userId)
       throw new Error("No autorizado para ver este pictograma");
-    }
 
     return pictogram;
   }
 
-  // Obtener todos los pictogramas
-  async getAllPictograms(user) {
-    if (user.role === "admin") {
-      return pictogramRepo.getAllPictograms();
-    }
-    // Caregiver: solo los suyos
+  async getArchivedPictograms(user) {
+    if (user.role === "admin") return pictogramRepo.getArchivedPictograms();
+
     return prisma.pictogram.findMany({
-      where: {
-        isActive: true,
-        deletedAt: null,
-        userId: user.userId,
+      where: { isActive: false, userId: user.userId },
+      include: {
+        pictogramPos: { include: { pos: true } },
+        semantic: { include: { category: true } },
+        image: true,
       },
-      include: { pictogramPos: { include: { pos: true } }, image: true },
     });
-  }
-
-  // Asignar pictograma a grids
-  async assignPictogramToGrids(user, pictogramId, gridIds) {
-    if (!Array.isArray(gridIds)) gridIds = [gridIds];
-
-    const pictogram = await prisma.pictogram.findUnique({
-      where: { id: pictogramId },
-    });
-
-    if (!pictogram || !pictogram.isActive) {
-      throw new Error("Pictograma no encontrado");
-    }
-
-    // Solo admin puede usar globales, caregiver solo los suyos
-    if (
-      user.role === "caregiver" &&
-      (!pictogram.userId || pictogram.userId !== user.userId)
-    ) {
-      throw new Error("No autorizado para asignar este pictograma");
-    }
-
-    const results = [];
-
-    for (const gridId of gridIds) {
-      const grid = await prisma.grid.findUnique({ where: { id: gridId } });
-      if (!grid || !grid.isActive) {
-        throw new Error(`Grid ${gridId} no válido`);
-      }
-
-      // Validación: caregiver solo en sus grids
-      if (user.role === "caregiver" && grid.userId !== user.userId) {
-        throw new Error(
-          `No autorizado: el grid ${gridId} no pertenece a este caregiver`
-        );
-      }
-
-      const exists = await prisma.gridPictogram.findUnique({
-        where: { gridId_pictogramId: { gridId, pictogramId } },
-      });
-
-      if (!exists) {
-        const gp = await prisma.gridPictogram.create({
-          data: {
-            gridId,
-            pictogramId,
-            position: 0,
-          },
-        });
-        results.push(gp);
-      }
-    }
-
-    return results;
   }
 }

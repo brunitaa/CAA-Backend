@@ -2,6 +2,7 @@ import { GridPictogramRepository } from "../repositories/gridPictogram.repositor
 import { GridRepository } from "../repositories/grid.repository.js";
 import { PictogramRepository } from "../repositories/pictogram.repository.js";
 import { CaregiverSpeakerRepository } from "../repositories/caregiverSpeaker.repository.js";
+import prisma from "../lib/prisma.js";
 
 const gridRepo = new GridRepository();
 const pictogramRepo = new PictogramRepository();
@@ -78,34 +79,19 @@ export class GridPictogramService {
   }
 
   async removePictogramFromGrid(user, gridId, pictogramId) {
-    const grid = await gridRepo.findGridById(gridId);
-    const pictogram = await pictogramRepo.findPictogramById(pictogramId);
-
-    if (!grid || !grid.isActive) throw new Error("Grid no encontrado");
-    if (!pictogram || !pictogram.isActive)
-      throw new Error("Pictograma no encontrado");
-
-    if (user.role === "caregiver") {
-      const gridSpeakerId = grid.userId;
-      const pictogramSpeakerId = pictogram.userId;
-
-      const allowedGrid = await caregiverSpeakerRepo.exists(
-        user.userId,
-        gridSpeakerId
-      );
-      const allowedPictogram = await caregiverSpeakerRepo.exists(
-        user.userId,
-        pictogramSpeakerId
-      );
-
-      if (!allowedGrid || !allowedPictogram) {
-        throw new Error(
-          "No tienes permiso para eliminar este pictograma de este grid"
-        );
-      }
+    // Verificar si existe el pictograma
+    const pictogram = await gridPictogramRepo.findPictogramById(pictogramId);
+    if (!pictogram) {
+      throw new Error(`Pictograma ${pictogramId} no encontrado`);
     }
 
-    return gridPictogramRepo.removePictogramFromGrid(gridId, pictogramId);
+    // Eliminar relación grid-pictograma
+    return await prisma.gridPictogram.deleteMany({
+      where: {
+        gridId: Number(gridId),
+        pictogramId: Number(pictogramId),
+      },
+    });
   }
 
   async listPictogramsByGrid(user, gridId) {

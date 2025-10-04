@@ -12,10 +12,11 @@ import gridRoutes from "./routes/grid.routes.js";
 import posRoutes from "./routes/pos.routes.js";
 import pictogramRoutes from "./routes/pictograms.routes.js";
 import gridPictogramRoutes from "./routes/gridPictogram.routes.js";
-
+import semanticRoutes from "./routes/semantic.routes.js";
 import { AppError } from "./errors/app.errors.js";
 import { bigintSerializer } from "./middlewares/bigintSerializer.middleware.js";
 import { logger } from "./middlewares/logger.middleware.js";
+import statsRoutes from "./routes/stats.routes.js";
 
 // Crear app
 const app = express();
@@ -45,6 +46,8 @@ app.use("/api/grids", gridRoutes);
 app.use("/api/pictograms", pictogramRoutes);
 app.use("/api/gridPictogram", gridPictogramRoutes);
 app.use("/api/pos", posRoutes);
+app.use("/api/stats", statsRoutes);
+app.use("/api", semanticRoutes);
 
 // Servir imágenes estáticas
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
@@ -62,5 +65,6 @@ app.use((err, req, res, next) => {
     message,
   });
 });
+app.use(express.json());
 
 export default app;

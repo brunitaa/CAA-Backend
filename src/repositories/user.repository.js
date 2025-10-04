@@ -97,5 +97,18 @@ export class UserRepository {
   async deleteOTP(email) {
     return await prisma.oTP.delete({ where: { email } });
   }
+  async findUsersByRole(role) {
+    return await prisma.user.findMany({
+      where: { role },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        gender: true,
+        age: true,
+        isActive: true,
+      },
+    });
+  }
 }
 export const userRepository = new UserRepository();

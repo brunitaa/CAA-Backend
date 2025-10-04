@@ -9,20 +9,17 @@ export class GridService {
   async createGrid(user, { name, description, speakerId }) {
     if (!name) throw new Error("El nombre del grid es requerido");
 
-    // Admin: crea grid global
     if (user.role === "admin") {
       return gridRepo.createGrid({
         name,
         description,
         isGlobal: true,
-        userId: null, // global
+        userId: null,
       });
     }
 
-    // Caregiver: crea grid solo para sus speakers
     if (user.role === "caregiver") {
       if (!speakerId) throw new Error("Se requiere speakerId para caregiver");
-
       const relation = await caregiverSpeakerRepo.findRelation(
         user.userId,
         speakerId
@@ -42,10 +39,7 @@ export class GridService {
   }
 
   async getGrids(user) {
-    if (user.role === "admin") {
-      return gridRepo.getAllGrids();
-    }
-
+    if (user.role === "admin") return gridRepo.getAllGrids();
     if (user.role === "caregiver") {
       const speakers = await caregiverSpeakerRepo.getSpeakersByCaregiver(
         user.userId
@@ -53,17 +47,14 @@ export class GridService {
       const speakerIds = speakers.map((s) => s.speakerId);
       return gridRepo.getGridsByUserIds(speakerIds);
     }
-
     throw new Error("No autorizado para ver grids");
   }
 
   async getGridById(user, gridId) {
     if (!gridId) throw new Error("ID del grid requerido");
-
     const grid = await gridRepo.findGridById(gridId);
     if (!grid || !grid.isActive) throw new Error("Grid no encontrado");
 
-    // Caregiver solo puede ver grids de sus speakers
     if (user.role === "caregiver") {
       const relation = await caregiverSpeakerRepo.findRelation(
         user.userId,
@@ -77,23 +68,18 @@ export class GridService {
 
   async updateGrid(user, gridId, { name, description }) {
     if (!gridId) throw new Error("ID del grid requerido");
-
     const grid = await gridRepo.findGridById(gridId);
     if (!grid || !grid.isActive) throw new Error("Grid no encontrado");
 
-    // Admin puede actualizar cualquier grid
-    if (user.role === "admin") {
+    if (user.role === "admin")
       return gridRepo.updateGrid(gridId, { name, description });
-    }
 
-    // Caregiver solo sus grids
     if (user.role === "caregiver") {
       const relation = await caregiverSpeakerRepo.findRelation(
         user.userId,
         grid.userId
       );
       if (!relation) throw new Error("No puedes actualizar este grid");
-
       return gridRepo.updateGrid(gridId, { name, description });
     }
 
@@ -104,31 +90,58 @@ export class GridService {
     const grid = await gridRepo.findGridById(gridId);
     if (!grid) throw new Error("Grid no encontrado");
 
-    // Admin
-    if (user.role === "admin") {
-      // Puede borrar cualquier grid (o solo globales si quieres)
-      return gridRepo.softDeleteGrid(gridId);
-    }
+    if (user.role === "admin") return gridRepo.softDeleteGrid(gridId);
 
-    // Caregiver
     if (user.role === "caregiver") {
-      // Si el grid es global, no puede borrarlo
-      if (!grid.userId) {
+      if (!grid.userId)
         throw new Error("No tienes permiso para eliminar grids globales");
-      }
-
-      // Verificar relación caregiver ↔ speaker
       const relation = await caregiverSpeakerRepo.findRelation(
         user.userId,
         grid.userId
       );
-      if (!relation) {
+      if (!relation)
         throw new Error("No tienes permiso para eliminar este grid");
-      }
-
       return gridRepo.softDeleteGrid(gridId);
     }
 
     throw new Error("Rol no autorizado para eliminar grids");
+  }
+
+  // Obtener grids archivados (isActive: false)
+  async getArchivedGrids(user) {
+    if (user.role === "admin") return gridRepo.getGridsByActiveStatus(false);
+
+    if (user.role === "caregiver") {
+      const speakers = await caregiverSpeakerRepo.getSpeakersByCaregiver(
+        user.userId
+      );
+      const speakerIds = speakers.map((s) => s.speakerId);
+      return gridRepo.getGridsByUserIdsAndStatus(speakerIds, false);
+    }
+
+    throw new Error("No autorizado para ver grids archivados");
+  }
+
+  // Restaurar grid (activar isActive)
+  async restoreGrid(user, gridId) {
+    const grid = await gridRepo.findGridById(gridId);
+    if (!grid) throw new Error("Grid no encontrado");
+
+    if (grid.isActive) return grid; // ya activo
+
+    if (user.role === "admin")
+      return gridRepo.updateGrid(gridId, { isActive: true });
+
+    if (user.role === "caregiver") {
+      const relation = await caregiverSpeakerRepo.findRelation(
+        user.userId,
+        grid.userId
+      );
+      if (!relation)
+        throw new Error("No tienes permiso para restaurar este grid");
+      return gridRepo.updateGrid(gridId, { isActive: true });
+    }
+
+    throw new Error("Rol no autorizado para restaurar grids");
   }
 }

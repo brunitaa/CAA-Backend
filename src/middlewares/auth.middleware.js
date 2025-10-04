@@ -26,11 +26,6 @@ export const authorizeRole =
     try {
       const payload = jwt.verify(token, process.env.JWT_SECRET);
 
-      // Para debug: ver el payload y roles permitidos
-      console.log("JWT payload:", payload);
-      console.log("Roles permitidos:", allowedRoles);
-
-      // Convertimos el payload.role a string si fuera un ID (en caso de usar ROLE_IDS)
       let roleName = payload.role;
       if (typeof payload.role === "number") {
         roleName = Object.keys(ROLE_IDS).find(
@@ -70,17 +65,15 @@ export const isAdmin = (req, res, next) => {
 export const authorizeUpdateUser = () => {
   return async (req, res, next) => {
     try {
-      const requester = req.user; // { userId, role }
+      const requester = req.user;
       const targetUserId = parseInt(req.params.id, 10);
 
-      // Admin siempre puede
       if (requester.role === "admin") return next();
 
-      // Caregiver -> puede editarse a sí mismo o a sus speakers
       if (requester.role === "caregiver") {
         if (requester.userId === targetUserId) return next();
 
-        const relation = await prisma.speakerCaregiver.findFirst({
+        const relation = await prisma.caregiverSpeaker.findFirst({
           where: {
             caregiverId: requester.userId,
             speakerId: targetUserId,
@@ -93,7 +86,6 @@ export const authorizeUpdateUser = () => {
           .json({ message: "No autorizado para editar este usuario" });
       }
 
-      // Speaker -> solo puede editarse a sí mismo
       if (requester.role === "speaker") {
         if (requester.userId === targetUserId) return next();
         return res

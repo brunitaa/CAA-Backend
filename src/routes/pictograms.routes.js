@@ -1,52 +1,65 @@
 import express from "express";
-import * as pictogramController from "../controllers/pictogram.controller.js";
+import {
+  createPictogram,
+  updatePictogram,
+  deletePictogram,
+  restorePictogram,
+  getAllPictograms,
+  getArchivedPictograms,
+  getPictogram,
+  getAllPos,
+  getAllSemanticCategories,
+} from "../controllers/pictogram.controller.js";
 import { verifyToken, authorizeRole } from "../middlewares/auth.middleware.js";
 import { uploadImage } from "../middlewares/upload.middleware.js";
 
 const router = express.Router();
 
+router.use(verifyToken);
+
 router.post(
   "/create",
-  verifyToken,
   authorizeRole(["admin", "caregiver"]),
   uploadImage.single("imageFile"),
-  pictogramController.createPictogram
+  createPictogram
 );
 
 router.put(
   "/edit/:id",
-  verifyToken,
   authorizeRole(["admin", "caregiver"]),
-  uploadImage.single("imageFile"), // multer
-  pictogramController.updatePictogram
+  uploadImage.single("imageFile"),
+  updatePictogram
 );
 
 router.delete(
   "/delete/:id",
-  verifyToken,
   authorizeRole(["admin", "caregiver"]),
-  pictogramController.deletePictogram
+  deletePictogram
 );
 
-router.post(
-  "/assign-grids",
-  verifyToken,
+router.patch(
+  "/restore/:id",
   authorizeRole(["admin", "caregiver"]),
-  pictogramController.assignPictogramToGrids
+  restorePictogram
 );
 
-router.get(
-  "/",
-  verifyToken,
-  authorizeRole(["admin", "caregiver"]),
-  pictogramController.getAllPictograms
-);
+router.get("/", authorizeRole(["admin", "caregiver"]), getAllPictograms);
 
 router.get(
-  "/:id",
-  verifyToken,
+  "/archived",
   authorizeRole(["admin", "caregiver"]),
-  pictogramController.getPictogram
+  getArchivedPictograms
+);
+
+router.get("/:id", authorizeRole(["admin", "caregiver"]), getPictogram);
+
+router.get("/dropdown/pos", authorizeRole(["admin", "caregiver"]), getAllPos);
+
+// Obtener todas las categorías semánticas para dropdown
+router.get(
+  "/dropdown/semantic",
+  authorizeRole(["admin", "caregiver"]),
+  getAllSemanticCategories
 );
 
 export default router;

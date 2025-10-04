@@ -1,11 +1,9 @@
-import { AuthService, ROLE_IDS } from "../services/auth.service.js";
+import { AuthService } from "../services/auth.service.js";
 import prisma from "../lib/prisma.js";
 
 const authService = new AuthService();
 
-/** ================== ADMIN ================== */
-
-// Registrar Admin (requiere JWT de otro Admin)
+// Registrar Admin
 export const registerAdmin = async (req, res, next) => {
   try {
     const creatorId = req.user.userId;
@@ -24,23 +22,22 @@ export const registerAdmin = async (req, res, next) => {
   }
 };
 
-// Verificar OTP Admin
-export const verifyAdminOTP = async (req, res, next) => {
+// Verificar AuthToken Admin
+export const verifyAdminToken = async (req, res, next) => {
   try {
-    const { email, otp } = req.body;
-    const result = await authService.verifyAdminOTP({ email, otp });
+    const { email, token } = req.body;
+    const result = await authService.verifyAuthToken({ email, token });
 
-    // Actualizar lastLogin
     await prisma.user.update({
       where: { id: result.userId },
-      data: { lastLogin: new Date() },
+      data: { isActive: true, lastLogin: new Date() },
     });
 
     res.cookie("token", result.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 días
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     res.json(result);
@@ -77,35 +74,30 @@ export const loginAdmin = async (req, res, next) => {
   }
 };
 
-/** ================== CAREGIVER ================== */
-
 // Registrar Caregiver
 export const registerCaregiver = async (req, res, next) => {
   try {
     const { email, username, password } = req.body;
-
     const result = await authService.registerCaregiver({
       email,
       username,
       password,
     });
-
     res.status(201).json(result);
   } catch (err) {
     next(err);
   }
 };
 
-// Verificar OTP Caregiver
-export const verifyOTP = async (req, res, next) => {
+// Verificar AuthToken Caregiver
+export const verifyTokenCaregiver = async (req, res, next) => {
   try {
-    const { email, otp } = req.body;
-    const result = await authService.verifyOTP({ email, otp });
+    const { email, token } = req.body;
+    const result = await authService.verifyAuthToken({ email, token });
 
-    // Actualizar lastLogin
     await prisma.user.update({
       where: { id: result.userId },
-      data: { lastLogin: new Date() },
+      data: { isActive: true, lastLogin: new Date() },
     });
 
     res.cookie("token", result.token, {
@@ -125,7 +117,6 @@ export const verifyOTP = async (req, res, next) => {
 export const loginCaregiver = async (req, res, next) => {
   try {
     const { email, password } = req.body;
-
     const { token, sessionId, userId } = await authService.loginCaregiver({
       email,
       password,
@@ -140,7 +131,7 @@ export const loginCaregiver = async (req, res, next) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      maxAge: 24 * 60 * 60 * 1000, // 1 día
+      maxAge: 24 * 60 * 60 * 1000,
     });
 
     res.json({ message: "Login exitoso", sessionId, userId });
@@ -149,8 +140,7 @@ export const loginCaregiver = async (req, res, next) => {
   }
 };
 
-/** ================== LOGOUT ================== */
-
+// Logout
 export const logout = async (req, res, next) => {
   try {
     const sessionId = req.sessionId;
@@ -163,39 +153,26 @@ export const logout = async (req, res, next) => {
   }
 };
 
-/** ================== OTP ================== */
-
-// Reenviar OTP a Caregiver
-export const resendOTP = async (req, res, next) => {
+// Solicitar AuthToken para reseteo de contraseña
+export const requestPasswordToken = async (req, res, next) => {
   try {
     const { email } = req.body;
-    const result = await authService.resendOTP({ email });
+    const result = await authService.requestPasswordToken(email);
     res.json(result);
   } catch (err) {
     next(err);
   }
 };
 
-// Solicitar OTP para reset de contraseña
-export const requestPasswordOTP = async (req, res, next) => {
+// Resetear contraseña usando AuthToken
+export const resetPasswordWithToken = async (req, res, next) => {
   try {
-    const { email } = req.body;
-    const result = await authService.requestPasswordOTP(email);
-    res.json(result);
-  } catch (err) {
-    next(err);
-  }
-};
-
-// Resetear contraseña con OTP
-export const resetPasswordWithOTP = async (req, res, next) => {
-  try {
-    const { email, otp, newPassword } = req.body;
-    const result = await authService.resetPasswordWithOTP(
+    const { email, token, newPassword } = req.body;
+    const result = await authService.resetPasswordWithToken({
       email,
-      otp,
-      newPassword
-    );
+      token,
+      newPassword,
+    });
     res.json(result);
   } catch (err) {
     next(err);

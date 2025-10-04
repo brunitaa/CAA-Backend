@@ -4,9 +4,12 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 async function main() {
-  // Elimina todas las sesiones de usuarios
-  const result = await prisma.userSession.deleteMany({});
-  console.log(` ${result.count} sesiones eliminadas.`);
+  // Borra todas las filas y reinicia el ID autoincremental
+  const result = await prisma.$executeRawUnsafe(`
+    TRUNCATE TABLE "UserSession" RESTART IDENTITY CASCADE;
+  `);
+
+  console.log("Sesiones eliminadas y secuencia reiniciada (ID volverá a 1).");
 }
 
 main()

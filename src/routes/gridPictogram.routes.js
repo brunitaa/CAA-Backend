@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   addPictogramsToGrid,
+  addPictogramsToGridAdmin,
   removePictogramFromGrid,
   listPictogramsByGrid,
 } from "../controllers/gridPictogram.controller.js";
@@ -10,16 +11,21 @@ const asyncHandler = (fn) => (req, res, next) => {
 };
 const router = Router();
 
-// POST /grid-pictograms → agrega uno o varios pictogramas a uno o varios grids
 router.post(
   "/assign-pictogram",
   authorizeRole(["admin", "caregiver"]),
   addPictogramsToGrid
 );
 
+router.post(
+  "/admin/assign-pictogram/:gridId",
+  authorizeRole(["admin"]),
+  addPictogramsToGridAdmin
+);
+
 // DELETE /grid-pictograms → elimina uno o varios pictogramas de uno o varios grids
 router.delete(
-  "/grid-pictogram",
+  "/delete",
   authorizeRole(["admin", "caregiver"]),
   removePictogramFromGrid
 );

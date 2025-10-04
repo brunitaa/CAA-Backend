@@ -4,74 +4,99 @@ import { sendOTPEmail } from "../services/email.service.js";
 import { AppError } from "../errors/app.errors.js";
 import prisma from "../lib/prisma.js";
 class UserService {
-  // Actualización de datos básicos
-  async updateUser(requester, userId, data) {
+  async updateSpeaker(speaker, data) {
     if (!data || Object.keys(data).length === 0)
       throw new AppError("No hay datos para actualizar", 400);
 
-    // Nunca permitir editar rol ni contraseña
-    if ("roleId" in data || "password" in data)
-      throw new AppError("No permitido editar rol o contraseña", 403);
-
     const safeData = {};
-
-    // Validar username único
-    if (data.username) {
-      const existingUser = await prisma.user.findUnique({
-        where: { username: data.username },
-      });
-      if (existingUser && existingUser.id !== userId) {
-        throw new AppError("El username ya está en uso", 400);
-      }
-      safeData.username = data.username;
-    }
-
+    if (data.username) safeData.username = data.username;
     if (data.gender) safeData.gender = data.gender;
-    if (data.age && requester.role === "speaker" && requester.id === userId)
-      safeData.age = data.age;
-
-    if (
-      data.isActive !== undefined &&
-      (requester.role === "admin" || requester.role === "caregiver")
-    ) {
-      safeData.isActive = data.isActive;
-    }
+    if (data.age) safeData.age = data.age;
 
     if (Object.keys(safeData).length === 0)
       throw new AppError("No hay campos válidos para actualizar", 400);
 
-    // PERMISOS
+    return await userRepository.updateUser(speaker.id, safeData);
+  }
+  async updateCaregiver(caregiver, userId, data) {
+    const safeData = {};
 
-    // Speaker solo puede editar su propio perfil
-    if (requester.role === "speaker" && requester.id !== userId) {
-      throw new AppError(
-        "No autorizado: un speaker solo puede editar su propio perfil",
-        403
-      );
-    }
-
-    // Caregiver solo puede editar su perfil o speakers asignados
-    if (requester.role === "caregiver" && requester.id !== userId) {
+    // Validación: solo puede editar speakers asignados o su propio perfil
+    if (caregiver.id !== userId) {
       const relation = await prisma.caregiverSpeaker.findUnique({
         where: {
           caregiverId_speakerId: {
-            caregiverId: requester.id,
+            caregiverId: caregiver.id,
             speakerId: userId,
           },
         },
       });
-
-      if (!relation) {
+      if (!relation)
         throw new AppError(
           "No autorizado: este speaker no pertenece al caregiver",
           403
         );
-      }
     }
 
-    // Admin puede editar cualquier usuario (sin restricciones)
+    if (data.username) safeData.username = data.username;
+    if (data.gender) safeData.gender = data.gender;
+    if (data.age) safeData.age = data.age;
 
-    // Actualizar en base de datos
+    if (Object.keys(safeData).length === 0)
+      throw new AppError("No hay campos válidos para actualizar", 400);
+
+    return await userRepository.updateUser(userId, safeData);
+  }
+  async updateAdmin(admin, userId, data) {
+    // Solo puede editar su propio perfil
+    if (admin.id !== userId) {
+      throw new AppError(
+        "No autorizado: un admin solo puede editar su propio perfil",
+        403
+      );
+    }
+    console.log("b");
+    console.log(data);
+
+    if (!data || Object.keys(data).length === 0)
+      throw new AppError("No hay datos para actualizar", 400);
+
+    const safeData = {};
+
+    // Username único
+    if (data.username) {
+      const existingUser = await prisma.user.findUnique({
+        where: { username: data.username },
+      });
+      if (existingUser && existingUser.id !== userId)
+        throw new AppError("El username ya está en uso", 400);
+      safeData.username = data.username;
+    }
+
+    // Email único
+    if (data.email) {
+      const existingEmail = await prisma.user.findUnique({
+        where: { email: data.email },
+      });
+      if (existingEmail && existingEmail.id !== userId)
+        throw new AppError("El correo ya está en uso", 400);
+      safeData.email = data.email;
+    }
+
+    // Password (si se envía)
+    if (data.password) {
+      // Aquí podrías hashear con bcrypt antes de guardar
+      safeData.password = data.password;
+    }
+
+    // Otros campos
+    if (data.gender) safeData.gender = data.gender;
+    if (data.age !== undefined) safeData.age = data.age;
+
+    if (Object.keys(safeData).length === 0)
+      throw new AppError("No hay campos válidos para actualizar", 400);
+
+    // Actualizar en la base de datos
     return await userRepository.updateUser(userId, safeData);
   }
 
@@ -106,6 +131,57 @@ class UserService {
     await userRepository.deleteOTP(newEmail);
 
     return { message: "Email actualizado correctamente" };
+  }
+
+  async getAllAdmins() {
+    return await prisma.user.findMany({
+      where: {
+        role: {
+          name: "admin", // filtramos por el campo name de la relación Role
+        },
+      },
+      select: {
+        id: true,
+        username: true,
+        isActive: true,
+        gender: true,
+        age: true,
+      },
+    });
+  }
+
+  async getAllSpeakers() {
+    return await prisma.user.findMany({
+      where: {
+        role: {
+          name: "speaker",
+        },
+      },
+      select: {
+        id: true,
+        username: true,
+        isActive: true,
+        gender: true,
+        age: true,
+      },
+    });
+  }
+
+  async getAllCaregivers() {
+    return await prisma.user.findMany({
+      where: {
+        role: {
+          name: "caregiver",
+        },
+      },
+      select: {
+        id: true,
+        username: true,
+        isActive: true,
+        gender: true,
+        age: true,
+      },
+    });
   }
 }
 

@@ -7,7 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
 enum Gender {
   female
   male
@@ -90,25 +89,25 @@ model Image {
 
 model Grid {
   id        Int      @id @default(autoincrement())
-  userId    Int?     // ahora opcional
+  userId    Int?     // opcional para grids globales
   name      String
   description String?
   isActive  Boolean  @default(true)
   deletedAt DateTime?
   isDefault Boolean  @default(false)
+  isGlobal  Boolean  @default(false)
   createdAt DateTime @default(now())
 
   user         User?       @relation(fields: [userId], references: [id])
   gridPictograms GridPictogram[]
 }
 
-
 model GridPictogram {
-  id         Int    @id @default(autoincrement())
-  gridId     Int
+  id          Int    @id @default(autoincrement())
+  gridId      Int
   pictogramId Int
-  position   Int
-  createdAt  DateTime @default(now())
+  position    Int
+  createdAt   DateTime @default(now())
 
   grid       Grid      @relation(fields: [gridId], references: [id])
   pictogram  Pictogram @relation(fields: [pictogramId], references: [id])
@@ -118,13 +117,15 @@ model GridPictogram {
 }
 
 model PartOfSpeech {
-  id          Int      @id @default(autoincrement())
-  code        String   @unique
+  id          Int       @id @default(autoincrement())
+  code        String    @unique
   name        String
   description String?
+  color       String    
 
   pictogramPos PictogramPos[]
 }
+
 
 model Pictogram {
   id             Int               @id @default(autoincrement())
@@ -138,10 +139,10 @@ model Pictogram {
   creator        User              @relation("PictogramCreator", fields: [createdBy], references: [id])
 
   usageFrequency BigInt            @default(0)
-  isActive       Boolean            @default(true)
+  isActive       Boolean           @default(true)
   deletedAt      DateTime?
-  isMultiword    Boolean            @default(false)
-  createdAt      DateTime           @default(now())
+  isMultiword    Boolean           @default(false)
+  createdAt      DateTime          @default(now())
   updatedAt      DateTime?
 
   image          Image?            @relation(fields: [imageId], references: [id])
@@ -276,11 +277,3 @@ model AuthToken {
 
   user User @relation(fields: [userId], references: [id])
 }
-
-model OTP {
-  email      String   @id
-  otp        String
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
-}
-

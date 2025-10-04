@@ -17,6 +17,19 @@ export class GridRepository {
       throw new Error("Error buscando grid: " + err.message);
     }
   }
+  async getGridsByActiveStatus(isActive) {
+    return prisma.grid.findMany({
+      where: { isActive },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async restoreGrid(id) {
+    return prisma.grid.update({
+      where: { id },
+      data: { isActive: true },
+    });
+  }
 
   async addPictogram(gridId, pictogramId) {
     try {

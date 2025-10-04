@@ -1,3 +1,4 @@
+// controllers/grid.controller.js
 import { GridService } from "../services/grid.service.js";
 
 const gridService = new GridService();
@@ -72,6 +73,35 @@ export const deleteGrid = async (req, res) => {
   } catch (err) {
     if (err.message.includes("permiso") || err.message.includes("rol"))
       return res.status(403).json({ message: err.message });
+    res.status(400).json({ message: err.message });
+  }
+};
+
+// Obtener grids archivados
+export const getArchivedGrids = async (req, res) => {
+  try {
+    const archived = await gridService.getArchivedGrids(req.user);
+    res.json(archived);
+  } catch (err) {
+    if (err.message.includes("No autorizado"))
+      return res.status(403).json({ message: err.message });
+    res.status(400).json({ message: err.message });
+  }
+};
+
+// Restaurar grid
+export const restoreGrid = async (req, res) => {
+  try {
+    const gridId = parseInt(req.params.id);
+    if (isNaN(gridId)) return res.status(400).json({ message: "ID inválido" });
+
+    const restored = await gridService.restoreGrid(req.user, gridId);
+    res.json(restored);
+  } catch (err) {
+    if (err.message.includes("permiso") || err.message.includes("rol"))
+      return res.status(403).json({ message: err.message });
+    if (err.message.includes("no encontrado"))
+      return res.status(404).json({ message: err.message });
     res.status(400).json({ message: err.message });
   }
 };

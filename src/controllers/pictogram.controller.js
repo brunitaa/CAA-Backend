@@ -1,103 +1,94 @@
 import { PictogramService } from "../services/pictogram.service.js";
-import { serializeBigInt } from "../utils/serialize.js";
 
 const pictogramService = new PictogramService();
 
+// Crear pictograma
 export const createPictogram = async (req, res) => {
   try {
-    const { name, posId } = req.body;
-    const file = req.file;
-
-    if (!name || !file || !posId) {
-      return res
-        .status(400)
-        .json({ message: "Nombre, archivo y POS son obligatorios" });
-    }
-
-    // Aquí pasamos imageFile, no imageId
+    const { name, posId, semanticIds } = req.body;
+    const imageFile = req.file; // multer
     const pictogram = await pictogramService.createPictogram(req.user, {
       name,
-      imageFile: file, // <-- CORREGIDO
+      imageFile,
       posId: parseInt(posId),
+      semanticIds: semanticIds ? semanticIds.map((id) => parseInt(id)) : [],
     });
-
-    res.status(201).json(serializeBigInt(pictogram));
+    res.status(201).json(pictogram);
   } catch (err) {
-    if (err.message.includes("No autorizado"))
-      return res.status(403).json({ message: err.message });
     res.status(400).json({ message: err.message });
   }
 };
 
+// Editar pictograma
 export const updatePictogram = async (req, res) => {
   try {
     const pictogramId = parseInt(req.params.id);
-    if (isNaN(pictogramId))
-      return res.status(400).json({ message: "ID inválido" });
-
-    const { name, posId } = req.body;
-    const file = req.file;
-
-    if (!name && !file && !posId) {
-      return res
-        .status(400)
-        .json({ message: "Debe enviar nombre, imagen o POS" });
-    }
-
-    // Pasamos imageFile si existe
-    const updated = await pictogramService.updatePictogram(
+    const { name, posId, semanticIds } = req.body;
+    const imageFile = req.file;
+    const pictogram = await pictogramService.updatePictogram(
       req.user,
       pictogramId,
       {
         name,
-        imageFile: file || undefined, // <- si no hay archivo, undefined
+        imageFile,
         posId: posId ? parseInt(posId) : undefined,
+        semanticIds: semanticIds
+          ? semanticIds.map((id) => parseInt(id))
+          : undefined,
       }
     );
-
-    res.json(serializeBigInt(updated));
+    res.json(pictogram);
   } catch (err) {
-    if (err.message.includes("No autorizado"))
-      return res.status(403).json({ message: err.message });
     res.status(400).json({ message: err.message });
   }
 };
 
+// Soft delete
 export const deletePictogram = async (req, res) => {
   try {
     const pictogramId = parseInt(req.params.id);
-    if (isNaN(pictogramId))
-      return res.status(400).json({ message: "ID inválido" });
+    await pictogramService.softDeletePictogram(req.user, pictogramId);
+    res.json({ message: "Pictograma eliminado" });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
 
-    const deleted = await pictogramService.softDeletePictogram(
+// Restaurar pictograma
+export const restorePictogram = async (req, res) => {
+  try {
+    const pictogramId = parseInt(req.params.id);
+    const restored = await pictogramService.restorePictogram(
       req.user,
       pictogramId
     );
-    res.json(serializeBigInt(deleted));
+    res.json(restored);
   } catch (err) {
-    if (err.message.includes("No autorizado"))
-      return res.status(403).json({ message: err.message });
     res.status(400).json({ message: err.message });
   }
 };
 
-import {
-  attachFullImageUrl,
-  attachFullImageUrlArray,
-} from "../utils/serialize.js";
-
-// Para todos los pictogramas
+// Obtener todos los pictogramas
 export const getAllPictograms = async (req, res) => {
   try {
     const pictograms = await pictogramService.getAllPictograms(req.user);
-    const pictogramsWithUrl = attachFullImageUrlArray(pictograms);
-    res.json(pictogramsWithUrl);
+    res.json(pictograms);
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
 };
 
-// Para un solo pictograma
+// Obtener archivados
+export const getArchivedPictograms = async (req, res) => {
+  try {
+    const pictograms = await pictogramService.getArchivedPictograms(req.user);
+    res.json(pictograms);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+// Obtener por ID
 export const getPictogram = async (req, res) => {
   try {
     const pictogramId = parseInt(req.params.id);
@@ -105,31 +96,26 @@ export const getPictogram = async (req, res) => {
       req.user,
       pictogramId
     );
-    const pictogramWithUrl = attachFullImageUrl(pictogram);
-    res.json(pictogramWithUrl);
+    res.json(pictogram);
   } catch (err) {
-    if (err.message.includes("No autorizado"))
-      return res.status(403).json({ message: err.message });
-    if (err.message.includes("Pictograma no encontrado"))
-      return res.status(404).json({ message: err.message });
+    res.status(404).json({ message: err.message });
+  }
+};
+export const getAllPos = async (req, res) => {
+  try {
+    const posList = await posService.getAllPos();
+    res.json(posList);
+  } catch (err) {
     res.status(400).json({ message: err.message });
   }
 };
 
-export const assignPictogramToGrids = async (req, res) => {
+// Obtener todas las categorías semánticas
+export const getAllSemanticCategories = async (req, res) => {
   try {
-    const { pictogramId, gridIds } = req.body;
-    const result = await pictogramService.assignPictogramToGrids(
-      req.user,
-      pictogramId,
-      gridIds
-    );
-    res.json(serializeBigInt(result));
+    const categories = await prisma.semanticCategory.findMany();
+    res.json(categories);
   } catch (err) {
-    if (err.message.includes("No autorizado"))
-      return res.status(403).json({ message: err.message });
-    if (err.message.includes("Grid") || err.message.includes("Pictograma"))
-      return res.status(400).json({ message: err.message });
-    res.status(500).json({ message: err.message });
+    res.status(400).json({ message: err.message });
   }
 };

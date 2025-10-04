@@ -5,6 +5,10 @@ const service = new GridPictogramService();
 // Agregar pictogramas a grids (acepta arrays)
 export const addPictogramsToGrid = async (req, res) => {
   try {
+    console.log("=== INICIO addPictogramsToGrid ===");
+    console.log("BODY RECIBIDO:", req.body);
+    console.log("REQ.USER:", req.user);
+
     const { gridId, pictogramIds, speakerId } = req.body;
 
     // Validaciones básicas
@@ -14,6 +18,7 @@ export const addPictogramsToGrid = async (req, res) => {
       pictogramIds.length === 0 ||
       !speakerId
     ) {
+      console.log("Validación fallida: campos requeridos");
       return res
         .status(400)
         .json({ message: "gridId, pictogramIds y speakerId son requeridos" });
@@ -21,12 +26,19 @@ export const addPictogramsToGrid = async (req, res) => {
 
     // Verificar que el grid exista
     const grid = await prisma.grid.findUnique({ where: { id: gridId } });
-    if (!grid) return res.status(404).json({ message: "Grid no encontrado" });
+    if (!grid) {
+      console.log(`Grid ${gridId} no encontrado`);
+      return res.status(404).json({ message: "Grid no encontrado" });
+    }
+    console.log("Grid encontrado:", grid);
 
     // Verificar que el speaker exista
     const speaker = await prisma.user.findUnique({ where: { id: speakerId } });
-    if (!speaker)
+    if (!speaker) {
+      console.log(`Speaker ${speakerId} no encontrado`);
       return res.status(404).json({ message: "Speaker no encontrado" });
+    }
+    console.log("Speaker encontrado:", speaker);
 
     // Validar que el speaker pertenece al caregiver (req.user.userId)
     const caregiverId = req.user.userId;
@@ -34,10 +46,14 @@ export const addPictogramsToGrid = async (req, res) => {
       where: { caregiverId, speakerId },
     });
     if (!relation) {
+      console.log(
+        `No autorizado: caregiver ${caregiverId} no tiene relación con speaker ${speakerId}`
+      );
       return res
         .status(403)
         .json({ message: "No autorizado para este speaker" });
     }
+    console.log("Relación caregiver-speaker verificada:", relation);
 
     // Verificar que todos los pictogramas existan
     const existingPictograms = await prisma.pictogram.findMany({
@@ -47,11 +63,13 @@ export const addPictogramsToGrid = async (req, res) => {
     const existingIds = existingPictograms.map((p) => p.id);
     const missingIds = pictogramIds.filter((id) => !existingIds.includes(id));
     if (missingIds.length > 0) {
+      console.log("Pictogramas faltantes:", missingIds);
       return res.status(404).json({
         message: "Algunos pictogramas no existen",
         missingIds,
       });
     }
+    console.log("Todos los pictogramas existen:", existingIds);
 
     // Preparar los datos para createMany
     const createData = pictogramIds.map((pictogramId, index) => ({
@@ -59,30 +77,113 @@ export const addPictogramsToGrid = async (req, res) => {
       pictogramId,
       position: index + 1,
     }));
+    console.log("Datos para createMany:", createData);
 
     await prisma.gridPictogram.createMany({
       data: createData,
       skipDuplicates: true, // evita errores si el pictograma ya está en el grid
     });
 
+    console.log("Pictogramas agregados correctamente");
     res.json({ message: "Pictogramas agregados correctamente" });
   } catch (err) {
     console.error("Error en addPictogramsToGrid:", err);
-    res
-      .status(500)
-      .json({
-        message: "Error agregando pictogramas al grid",
-        error: err.message,
-      });
+    res.status(500).json({
+      message: "Error agregando pictogramas al grid",
+      error: err.message,
+    });
+  }
+};
+export const addPictogramsToGridAdmin = async (req, res) => {
+  try {
+    console.log("=== INICIO addPictogramsToGridAdmin ===");
+    console.log("BODY RECIBIDO:", req.body);
+    console.log("REQ.USER:", req.user);
+
+    let { gridId, pictogramIds } = req.body;
+
+    // Validación básica de existencia
+    if (
+      !gridId ||
+      !pictogramIds ||
+      !Array.isArray(pictogramIds) ||
+      pictogramIds.length === 0
+    ) {
+      return res
+        .status(400)
+        .json({ message: "gridId y pictogramIds son requeridos" });
+    }
+
+    // Convertir a enteros
+    const gridIdInt = Number(gridId);
+    if (isNaN(gridIdInt)) {
+      return res.status(400).json({ message: "gridId inválido" });
+    }
+    pictogramIds = pictogramIds.map((id) => {
+      const idInt = Number(id);
+      if (isNaN(idInt)) throw new Error(`pictogramId inválido: ${id}`);
+      return idInt;
+    });
+
+    // Solo admins
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ message: "No autorizado" });
+    }
+
+    // Verificar que el grid exista
+    const grid = await prisma.grid.findUnique({ where: { id: gridIdInt } });
+    if (!grid) return res.status(404).json({ message: "Grid no encontrado" });
+
+    // Verificar que todos los pictogramas existan
+    const existingPictograms = await prisma.pictogram.findMany({
+      where: { id: { in: pictogramIds } },
+      select: { id: true },
+    });
+    const existingIds = existingPictograms.map((p) => p.id);
+    const missingIds = pictogramIds.filter((id) => !existingIds.includes(id));
+    if (missingIds.length > 0) {
+      return res
+        .status(404)
+        .json({ message: "Algunos pictogramas no existen", missingIds });
+    }
+
+    // Preparar datos para createMany
+    const createData = pictogramIds.map((pictogramId, index) => ({
+      gridId: gridIdInt,
+      pictogramId,
+      position: index + 1, // Esto puedes ajustar si quieres conservar posiciones existentes
+    }));
+
+    console.log("Datos para createMany:", createData);
+
+    await prisma.gridPictogram.createMany({
+      data: createData,
+      skipDuplicates: true, // Evita errores si ya está agregado
+    });
+
+    console.log("Pictogramas agregados correctamente");
+    res.json({ message: "Pictogramas agregados correctamente" });
+  } catch (err) {
+    console.error("Error en addPictogramsToGridAdmin:", err);
+    res.status(500).json({
+      message: "Error agregando pictogramas al grid",
+      error: err.message,
+    });
   }
 };
 
 // Eliminar pictogramas de grids (acepta arrays)
+// controllers/gridPictogram.controller.js
 export const removePictogramFromGrid = async (req, res) => {
   try {
     let { gridId, pictogramId } = req.body;
 
-    // Normalizar a arrays
+    if (!gridId || !pictogramId) {
+      return res
+        .status(400)
+        .json({ message: "gridId y pictogramId son requeridos" });
+    }
+
     const gridIds = Array.isArray(gridId) ? gridId : [gridId];
     const pictogramIds = Array.isArray(pictogramId)
       ? pictogramId
