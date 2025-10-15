@@ -1,4 +1,3 @@
-// src/middlewares/logger.middleware.js
 import fs from "fs";
 import path from "path";
 

@@ -29,10 +29,10 @@ app.use(bigintSerializer);
 app.use(logger);
 app.use(morgan("dev"));
 
-// 🔹 CORS
+//  CORS
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: ["http://localhost:5173", "http://localhost:5000"],
     credentials: true,
   })
 );
@@ -42,12 +42,13 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/speaker", speakerRoutes);
+//app.use("api/caregiver", caregiverRoutes);
 app.use("/api/grids", gridRoutes);
 app.use("/api/pictograms", pictogramRoutes);
 app.use("/api/gridPictogram", gridPictogramRoutes);
 app.use("/api/pos", posRoutes);
 app.use("/api/stats", statsRoutes);
-app.use("/api", semanticRoutes);
+app.use("/api/semantic", semanticRoutes);
 
 // Servir imágenes estáticas
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));

@@ -1,18 +1,29 @@
 import { PictogramService } from "../services/pictogram.service.js";
+import { PosService } from "../services/pos.service.js";
 
 const pictogramService = new PictogramService();
+
+// Función auxiliar para normalizar semanticIds
+const normalizeSemanticIds = (semanticIds) => {
+  if (!semanticIds) return [];
+  return Array.isArray(semanticIds)
+    ? semanticIds.map((id) => parseInt(id))
+    : [parseInt(semanticIds)];
+};
 
 // Crear pictograma
 export const createPictogram = async (req, res) => {
   try {
     const { name, posId, semanticIds } = req.body;
     const imageFile = req.file; // multer
+
     const pictogram = await pictogramService.createPictogram(req.user, {
       name,
       imageFile,
       posId: parseInt(posId),
-      semanticIds: semanticIds ? semanticIds.map((id) => parseInt(id)) : [],
+      semanticIds: normalizeSemanticIds(semanticIds),
     });
+
     res.status(201).json(pictogram);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -25,6 +36,7 @@ export const updatePictogram = async (req, res) => {
     const pictogramId = parseInt(req.params.id);
     const { name, posId, semanticIds } = req.body;
     const imageFile = req.file;
+
     const pictogram = await pictogramService.updatePictogram(
       req.user,
       pictogramId,
@@ -32,11 +44,13 @@ export const updatePictogram = async (req, res) => {
         name,
         imageFile,
         posId: posId ? parseInt(posId) : undefined,
-        semanticIds: semanticIds
-          ? semanticIds.map((id) => parseInt(id))
-          : undefined,
+        semanticIds:
+          semanticIds !== undefined
+            ? normalizeSemanticIds(semanticIds)
+            : undefined,
       }
     );
+
     res.json(pictogram);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -78,7 +92,7 @@ export const getAllPictograms = async (req, res) => {
   }
 };
 
-// Obtener archivados
+// Obtener pictogramas archivados
 export const getArchivedPictograms = async (req, res) => {
   try {
     const pictograms = await pictogramService.getArchivedPictograms(req.user);
@@ -101,6 +115,8 @@ export const getPictogram = async (req, res) => {
     res.status(404).json({ message: err.message });
   }
 };
+
+// Obtener todos los POS
 export const getAllPos = async (req, res) => {
   try {
     const posList = await posService.getAllPos();

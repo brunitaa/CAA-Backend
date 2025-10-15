@@ -4,6 +4,7 @@ import {
   addPictogramsToGridAdmin,
   removePictogramFromGrid,
   listPictogramsByGrid,
+  orderGridPictograms,
 } from "../controllers/gridPictogram.controller.js";
 import { authorizeRole } from "../middlewares/auth.middleware.js";
 const asyncHandler = (fn) => (req, res, next) => {
@@ -23,18 +24,18 @@ router.post(
   addPictogramsToGridAdmin
 );
 
-// DELETE /grid-pictograms → elimina uno o varios pictogramas de uno o varios grids
 router.delete(
   "/delete",
   authorizeRole(["admin", "caregiver"]),
   removePictogramFromGrid
 );
 
-// GET /grid-pictograms/:gridId → lista pictogramas de un grid
 router.get(
   "/:gridId",
   authorizeRole(["admin", "caregiver"]),
   listPictogramsByGrid
 );
+
+router.post("/:id/order", orderGridPictograms);
 
 export default router;

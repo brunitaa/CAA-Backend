@@ -42,7 +42,6 @@ model User {
   sentences         Sentence[]
   sessions          UserSession[]
   statistics        UserStatistics?
-  devices           Device[]
   mlTrainingData    MLTrainingData[]
   mlPredictions     MLPrediction[]
   authTokens        AuthToken[]
@@ -226,15 +225,6 @@ model UserStatistics {
   updatedAt           DateTime?
 }
 
-model Device {
-  id         Int      @id @default(autoincrement())
-  userId     Int
-  deviceType String
-  deviceToken String? @unique
-  lastSeen   DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id])
-}
 
 model MLTrainingData {
   id              Int      @id @default(autoincrement())

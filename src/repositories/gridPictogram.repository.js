@@ -2,10 +2,9 @@ import prisma from "../lib/prisma.js";
 
 export class GridPictogramRepository {
   async exists(gridId, pictogramId) {
-    const record = await prisma.gridPictogram.findUnique({
+    return !!(await prisma.gridPictogram.findUnique({
       where: { gridId_pictogramId: { gridId, pictogramId } },
-    });
-    return !!record;
+    }));
   }
 
   async getNextPosition(gridId) {
@@ -13,7 +12,7 @@ export class GridPictogramRepository {
       where: { gridId },
       orderBy: { position: "desc" },
     });
-    return last ? last.position + 1 : 0;
+    return last ? last.position + 1 : 1;
   }
 
   async addPictogram(gridId, pictogramId, position) {
@@ -23,8 +22,8 @@ export class GridPictogramRepository {
   }
 
   async removePictogramFromGrid(gridId, pictogramId) {
-    return prisma.gridPictogram.delete({
-      where: { gridId_pictogramId: { gridId, pictogramId } },
+    return prisma.gridPictogram.deleteMany({
+      where: { gridId, pictogramId },
     });
   }
 

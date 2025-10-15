@@ -191,7 +191,11 @@ export class AuthService {
       purpose: "EMAIL_VERIFICATION",
     });
 
-    return { message: "Caregiver registrado. OTP enviado al correo", email };
+    return {
+      success: true,
+      message: "Caregiver registrado. OTP enviado al correo",
+      email,
+    };
   }
 
   async loginAdmin({ email, password }) {

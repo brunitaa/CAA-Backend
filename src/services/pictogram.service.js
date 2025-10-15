@@ -6,11 +6,11 @@ const pictogramRepo = new PictogramRepository();
 const imageRepo = new ImageRepository();
 
 export class PictogramService {
-  async createPictogram(user, { name, imageFile, posId, semanticIds = [] }) {
+  //  Crear pictograma
+  async createPictogram(user, { name, imageFile, posId, semanticIds }) {
     if (!name) throw new Error("El nombre del pictograma es requerido");
     if (!posId) throw new Error("Debe asignarse un Part of Speech (POS)");
 
-    // Verificar POS
     const pos = await prisma.partOfSpeech.findUnique({ where: { id: posId } });
     if (!pos) throw new Error("POS no encontrado");
 
@@ -26,9 +26,15 @@ export class PictogramService {
       imageId = image.id;
     }
 
+    // Normalizar semanticIds siempre a array de enteros
+    const semanticArray = semanticIds
+      ? Array.isArray(semanticIds)
+        ? semanticIds.map((id) => parseInt(id))
+        : [parseInt(semanticIds)]
+      : [];
+
     const isAdmin = user.role === "admin";
 
-    // Crear pictograma con POS anidado
     const pictogram = await prisma.pictogram.create({
       data: {
         name,
@@ -43,10 +49,10 @@ export class PictogramService {
             confidence: 1,
           },
         },
-        semantic: semanticIds.length
+        semantic: semanticArray.length
           ? {
               createMany: {
-                data: semanticIds.map((categoryId) => ({ categoryId })),
+                data: semanticArray.map((categoryId) => ({ categoryId })),
                 skipDuplicates: true,
               },
             }
@@ -62,6 +68,7 @@ export class PictogramService {
     return pictogram;
   }
 
+  //  Actualizar pictograma
   async updatePictogram(
     user,
     pictogramId,
@@ -74,6 +81,7 @@ export class PictogramService {
     if (user.role === "caregiver" && pictogram.userId !== user.userId)
       throw new Error("No autorizado para editar este pictograma");
 
+    // Crear nueva imagen si se envió
     let newImageId = pictogram.imageId;
     if (imageFile) {
       const image = await imageRepo.createImage({
@@ -91,7 +99,7 @@ export class PictogramService {
       updatedAt: new Date(),
     };
 
-    // Actualizar POS si se envió
+    // Actualizar POS
     if (posId) {
       const pos = await prisma.partOfSpeech.findUnique({
         where: { id: posId },
@@ -113,13 +121,20 @@ export class PictogramService {
       }
     }
 
-    // Actualizar semántica si se envió
-    if (Array.isArray(semanticIds)) {
+    // Actualizar categorías semánticas
+    if (semanticIds !== undefined) {
+      // Normalizar a array
+      const semanticArray = Array.isArray(semanticIds)
+        ? semanticIds.map((id) => parseInt(id))
+        : [parseInt(semanticIds)];
+
+      // Eliminar existentes
       await prisma.pictogramSemantic.deleteMany({ where: { pictogramId } });
 
-      if (semanticIds.length > 0) {
+      // Crear nuevas si hay
+      if (semanticArray.length > 0) {
         await prisma.pictogramSemantic.createMany({
-          data: semanticIds.map((categoryId) => ({
+          data: semanticArray.map((categoryId) => ({
             pictogramId,
             categoryId,
           })),
@@ -128,9 +143,11 @@ export class PictogramService {
       }
     }
 
+    // Actualizar datos principales
     return pictogramRepo.updatePictogram(pictogramId, updatedData);
   }
 
+  //  Soft delete
   async softDeletePictogram(user, pictogramId) {
     const pictogram = await pictogramRepo.findById(pictogramId);
     if (!pictogram || !pictogram.isActive)
@@ -142,6 +159,7 @@ export class PictogramService {
     return pictogramRepo.softDeletePictogram(pictogramId);
   }
 
+  //  Restaurar pictograma
   async restorePictogram(user, pictogramId) {
     const pictogram = await pictogramRepo.findById(pictogramId);
     if (!pictogram) throw new Error("Pictograma no encontrado");
@@ -156,6 +174,7 @@ export class PictogramService {
     });
   }
 
+  //  Obtener todos los pictogramas activos
   async getAllPictograms(user) {
     if (user.role === "admin") return pictogramRepo.getAllPictograms();
 
@@ -169,6 +188,7 @@ export class PictogramService {
     });
   }
 
+  //  Obtener por ID
   async getPictogramById(user, pictogramId) {
     const pictogram = await pictogramRepo.findById(pictogramId);
     if (!pictogram || !pictogram.isActive)
@@ -180,6 +200,7 @@ export class PictogramService {
     return pictogram;
   }
 
+  //  Obtener pictogramas archivados
   async getArchivedPictograms(user) {
     if (user.role === "admin") return pictogramRepo.getArchivedPictograms();
 
