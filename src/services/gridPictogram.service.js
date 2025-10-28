@@ -15,7 +15,12 @@ const getPriorityByPartOfSpeech = (pos) => {
 };
 
 export class GridPictogramService {
-  async addPictogramToGrid(user, gridIdsInput, pictogramIdsInput) {
+  async addPictogramToGrid(
+    user,
+    gridIdsInput,
+    pictogramIdsInput,
+    positionInput = null
+  ) {
     const gridIds = Array.isArray(gridIdsInput) ? gridIdsInput : [gridIdsInput];
     const pictogramIds = Array.isArray(pictogramIdsInput)
       ? pictogramIdsInput
@@ -34,46 +39,65 @@ export class GridPictogramService {
         if (!pictogram || !pictogram.isActive)
           throw new Error(`Pictograma ${pictogramId} no encontrado`);
 
-        // permisos caregiver
+        // Validar permisos caregiver
         if (user.role === "caregiver") {
           const allowedGrid = await caregiverSpeakerRepo.exists(
             user.userId,
             grid.userId
           );
-          const allowedPictogram = await caregiverSpeakerRepo.exists(
-            user.userId,
-            pictogram.userId
-          );
-          if (!allowedGrid || !allowedPictogram)
+          if (!allowedGrid)
             throw new Error(
-              `No tienes permiso para agregar ${pictogram.id} al grid ${grid.id}`
+              `No tienes permiso para agregar pictogramas al grid ${grid.name}`
             );
         }
 
-        // verificar si ya existe
-        const exists = await gridPictogramRepo.exists(grid.id, pictogram.id);
+        // Si pictograma global y usuario es caregiver → crear copia personalizada
+        let pictogramIdToUse = pictogram.id;
+        if (!pictogram.userId && user.role === "caregiver") {
+          const copy = await prisma.pictogram.create({
+            data: {
+              name: pictogram.name,
+              imageId: pictogram.imageId,
+              userId: grid.userId, // pertenece al speaker
+              createdBy: user.userId,
+              originalId: pictogram.id,
+              isActive: true,
+            },
+          });
+          pictogramIdToUse = copy.id;
+        }
+
+        // Verificar si ya existe en el grid
+        const exists = await gridPictogramRepo.exists(
+          grid.id,
+          pictogramIdToUse
+        );
         if (exists) continue;
 
-        // obtener la siguiente posición
-        const position = await gridPictogramRepo.getNextPosition(grid.id);
+        // Obtener siguiente posición
+        let position = await gridPictogramRepo.getNextPosition(grid.id);
 
-        console.log(
-          `Agregando pictograma ${pictogram.id} al grid ${grid.id} en posición ${position}`
-        );
+        // Si se especifica posición, desplazar los existentes
+        if (positionInput) {
+          await prisma.gridPictogram.updateMany({
+            where: { gridId: grid.id, position: { gte: positionInput } },
+            data: { position: { increment: 1 } },
+          });
+          position = positionInput;
+        }
 
         const gp = await gridPictogramRepo.addPictogram(
           grid.id,
-          pictogram.id,
+          pictogramIdToUse,
           position
         );
         results.push(gp);
       }
 
-      // reordenar después de agregar
+      // Reordenar pictogramas del grid por POS
       await this.orderGridPictograms(grid.id);
     }
 
-    console.log("Resultados finales:", results);
     return results;
   }
 
@@ -81,6 +105,7 @@ export class GridPictogramService {
     const gridId = Number(gridIdInput);
     if (isNaN(gridId)) throw new Error("gridId inválido");
 
+    // Obtener todos los pictogramas del grid con sus relaciones necesarias
     const pictograms = await prisma.gridPictogram.findMany({
       where: { gridId },
       include: {
@@ -90,49 +115,66 @@ export class GridPictogramService {
       },
     });
 
+    // Ordenar según prioridad de POS
     const ordered = pictograms.sort((a, b) => {
       const posA = a.pictogram.pictogramPos[0]?.pos.code || "noun";
       const posB = b.pictogram.pictogramPos[0]?.pos.code || "noun";
       return getPriorityByPartOfSpeech(posA) - getPriorityByPartOfSpeech(posB);
     });
 
-    // Primer paso: asignar posiciones negativas para evitar colisiones
-    for (let i = 0; i < ordered.length; i++) {
-      await prisma.gridPictogram.update({
-        where: { id: ordered[i].id },
-        data: { position: -(i + 1) },
-      });
-    }
-
-    // Segundo paso: reasignar posiciones correctas 1..N
-    for (let i = 0; i < ordered.length; i++) {
-      await prisma.gridPictogram.update({
-        where: { id: ordered[i].id },
-        data: { position: i + 1 },
-      });
-    }
+    // 🔹 Paso 1: asignar posiciones temporales negativas para evitar conflictos
+    await prisma.$transaction(
+      ordered.map((gp, index) =>
+        prisma.gridPictogram.update({
+          where: { id: gp.id },
+          data: { position: -(index + 1) },
+        })
+      )
+    );
+    await prisma.$transaction(
+      ordered.map((gp, index) =>
+        prisma.gridPictogram.update({
+          where: { id: gp.id },
+          data: { position: index + 1 },
+        })
+      )
+    );
 
     return ordered;
   }
 
-  async removePictogramFromGrid(user, gridId, pictogramId) {
-    const pictogram = await gridPictogramRepo.findPictogramById(pictogramId);
-    if (!pictogram) throw new Error(`Pictograma ${pictogramId} no encontrado`);
+  async removePictogramFromGrid(user, gridIdInput, pictogramIdInput) {
+    const gridId = Number(gridIdInput);
+    const pictogramId = Number(pictogramIdInput);
+
+    const grid = await gridRepo.findGridById(gridId);
+    const pictogram = await pictogramRepo.findPictogramById(pictogramId);
+
+    if (!grid || !grid.isActive) throw new Error("Grid no encontrado");
+    if (!pictogram || !pictogram.isActive)
+      throw new Error("Pictograma no encontrado");
+
+    if (user.role === "caregiver") {
+      const allowed = await caregiverSpeakerRepo.exists(
+        user.userId,
+        grid.userId
+      );
+      if (!allowed)
+        throw new Error("No tienes permiso para modificar este grid");
+    }
 
     return await prisma.gridPictogram.deleteMany({
-      where: {
-        gridId: Number(gridId),
-        pictogramId: Number(pictogramId),
-      },
+      where: { gridId, pictogramId },
     });
   }
 
   async listPictogramsByGrid(user, gridIdInput) {
     const gridId = Number(gridIdInput);
     const grid = await gridRepo.findGridById(gridId);
+
     if (!grid || !grid.isActive) throw new Error("Grid no encontrado");
 
-    if (user.role === "caregiver") {
+    if (user.role === "caregiver" && grid.userId) {
       const allowed = await caregiverSpeakerRepo.exists(
         user.userId,
         grid.userId
@@ -158,6 +200,7 @@ export class GridPictogramService {
         id: gp.pictogram.id,
         name: gp.pictogram.name,
         userId: gp.pictogram.userId,
+        isGlobal: !gp.pictogram.userId,
         image: gp.pictogram.image
           ? { url: gp.pictogram.image.url, fullUrl: gp.pictogram.image.url }
           : null,

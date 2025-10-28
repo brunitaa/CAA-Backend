@@ -36,7 +36,6 @@ export class GridPictogramRepository {
           include: {
             image: true,
             pictogramPos: { include: { pos: true } },
-            semantic: { include: { category: true } },
             creator: true,
             user: true,
           },
@@ -52,7 +51,6 @@ export class GridPictogramRepository {
       include: {
         image: true,
         pictogramPos: { include: { pos: true } },
-        semantic: { include: { category: true } },
         creator: true,
         user: true,
       },
@@ -67,7 +65,6 @@ export class GridPictogramRepository {
       include: {
         image: true,
         pictogramPos: { include: { pos: true } },
-        semantic: { include: { category: true } },
         creator: true,
         user: true,
       },

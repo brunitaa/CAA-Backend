@@ -1,4 +1,3 @@
-// src/services/session.service.js
 import prisma from "../lib/prisma.js";
 
 export const createSession = async (userId, deviceInfo) => {

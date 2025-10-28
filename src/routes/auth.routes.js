@@ -5,31 +5,28 @@ import {
   verifyAdminToken,
   loginAdmin,
   registerCaregiver,
-  verifyTokenCaregiver,
+  verifyOtpCaregiver,
   loginCaregiver,
   logout,
   requestPasswordToken,
   resetPasswordWithToken,
   getProfile,
+  resendOtp,
 } from "../controllers/auth.controller.js";
 
 const router = express.Router();
 
-// Admin
 router.post("/register-admin", registerAdmin);
 router.post("/verify-token-admin", verifyAdminToken);
 router.post("/admin/login", loginAdmin);
 
-// Caregiver
 router.post("/register-caregiver", registerCaregiver);
-router.post("/verify-token-caregiver", verifyTokenCaregiver);
+router.post("/verify-otp-caregiver", verifyOtpCaregiver);
 router.post("/caregiver/login", loginCaregiver);
 
-// Password reset
 router.post("/request-password-token", requestPasswordToken);
 router.post("/reset-password-token", resetPasswordWithToken);
 
-// Perfil y validación
 router.get("/validate", verifyToken, (req, res) => {
   res.json({
     valid: true,
@@ -41,5 +38,6 @@ router.get("/profile", verifyToken, getProfile);
 
 // Logout (Caregiver o Admin)
 router.post("/logout", authorizeRole(["caregiver", "admin"]), logout);
+router.post("/resend-otp", resendOtp);
 
 export default router;

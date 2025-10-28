@@ -3,12 +3,11 @@ import prisma from "../lib/prisma.js";
 
 async function clearDatabase() {
   try {
-    console.log("🚀 Limpiando la base de datos...");
+    console.log(" Limpiando la base de datos...");
 
     // Primero borrar relaciones dependientes
     await prisma.gridPictogram.deleteMany({});
     await prisma.pictogramPos.deleteMany({});
-    await prisma.pictogramSemantic.deleteMany({});
     await prisma.MLPrediction.deleteMany({});
     await prisma.MLTrainingData.deleteMany({});
     await prisma.UserStatistics.deleteMany({});
@@ -26,9 +25,8 @@ async function clearDatabase() {
     await prisma.User.deleteMany({});
     await prisma.Role.deleteMany({});
     await prisma.PartOfSpeech.deleteMany({});
-    await prisma.SemanticCategory.deleteMany({});
 
-    console.log("✅ Todas las tablas han sido vaciadas correctamente.");
+    console.log("Todas las tablas han sido vaciadas correctamente.");
 
     // Opcional: Reiniciar secuencias de PostgreSQL
     await prisma.$executeRawUnsafe(

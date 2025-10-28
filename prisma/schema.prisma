@@ -26,11 +26,13 @@ model User {
   gender            Gender?
   age               Int?
   roleId            Int
-  role              Role              @relation(fields: [roleId], references: [id])
+  role              Role               @relation(fields: [roleId], references: [id])
   isActive          Boolean            @default(true)
   lastLogin         DateTime?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime?
+
+  allowCustomization Boolean           @default(false)
 
   auth              UserAuth?
   pictograms        Pictogram[]        @relation("PictogramOwner")
@@ -38,13 +40,21 @@ model User {
   caregiverSpeakersCaregiver CaregiverSpeaker[] @relation("CaregiverRelation")
   caregiverSpeakersSpeaker   CaregiverSpeaker[] @relation("SpeakerRelation")
   grids             Grid[]
+  createdGrids      Grid[]             @relation("GridCreator")
   images            Image[]
   sentences         Sentence[]
   sessions          UserSession[]
   statistics        UserStatistics?
   mlTrainingData    MLTrainingData[]
   mlPredictions     MLPrediction[]
+  mlModels          MLModelMetadata[]  @relation("ModelTrainer")
   authTokens        AuthToken[]
+  validatedTrainingData MLTrainingData[] @relation("TrainingValidator")
+
+  speakerSettingsAsCaregiver SpeakerSettings[] @relation("SpeakerSettingsCaregiver")
+  speakerSettingsAsSpeaker  SpeakerSettings[] @relation("SpeakerSettingsSpeaker")
+    userPictogramUsages UserPictogramUsage[]
+
 }
 
 model UserAuth {
@@ -72,6 +82,22 @@ model CaregiverSpeaker {
   @@unique([caregiverId, speakerId])
 }
 
+model SpeakerSettings {
+  id                  Int      @id @default(autoincrement())
+  speakerId           Int
+  caregiverId         Int
+  mlEnabled           Boolean  @default(true)
+  canEditPictograms   Boolean  @default(true)
+  canEditGrids        Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime?
+
+  speaker   User @relation("SpeakerSettingsSpeaker", fields: [speakerId], references: [id])
+  caregiver User @relation("SpeakerSettingsCaregiver", fields: [caregiverId], references: [id])
+
+  @@unique([speakerId, caregiverId])
+}
+
 model Image {
   id        Int      @id @default(autoincrement())
   url       String
@@ -82,22 +108,24 @@ model Image {
   userId    Int?
   createdAt DateTime @default(now())
 
-  user User? @relation(fields: [userId], references: [id])
+  user       User?       @relation(fields: [userId], references: [id])
   pictograms Pictogram[]
 }
 
 model Grid {
-  id        Int      @id @default(autoincrement())
-  userId    Int?     // opcional para grids globales
-  name      String
-  description String?
-  isActive  Boolean  @default(true)
-  deletedAt DateTime?
-  isDefault Boolean  @default(false)
-  isGlobal  Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id            Int      @id @default(autoincrement())
+  userId        Int?
+  createdBy     Int?
+  name          String
+  description   String?
+  isActive      Boolean  @default(true)
+  deletedAt     DateTime?
+  isDefault     Boolean  @default(false)
+  isGlobal      Boolean  @default(false)
+  createdAt     DateTime @default(now())
 
-  user         User?       @relation(fields: [userId], references: [id])
+  user          User? @relation(fields: [userId], references: [id])
+  createdByUser User? @relation("GridCreator", fields: [createdBy], references: [id])
   gridPictograms GridPictogram[]
 }
 
@@ -108,8 +136,8 @@ model GridPictogram {
   position    Int
   createdAt   DateTime @default(now())
 
-  grid       Grid      @relation(fields: [gridId], references: [id])
-  pictogram  Pictogram @relation(fields: [pictogramId], references: [id])
+  grid      Grid      @relation(fields: [gridId], references: [id])
+  pictogram Pictogram @relation(fields: [pictogramId], references: [id])
 
   @@unique([gridId, pictogramId])
   @@unique([gridId, position])
@@ -124,7 +152,6 @@ model PartOfSpeech {
 
   pictogramPos PictogramPos[]
 }
-
 
 model Pictogram {
   id             Int               @id @default(autoincrement())
@@ -147,11 +174,16 @@ model Pictogram {
   image          Image?            @relation(fields: [imageId], references: [id])
   pictogramPos   PictogramPos[]
   gridPictograms GridPictogram[]
-  semantic       PictogramSemantic[]
   mlTraining     MLTrainingData[]
   predictedBy    MLPrediction[]    @relation("PredictedPictogramRelation")
   actualFor      MLPrediction[]    @relation("ActualPictogramRelation")
   statisticsFav  UserStatistics?   @relation("FavoritePictogram")
+
+  originalId     Int?
+  original       Pictogram?        @relation("PictogramBaseRelation", fields: [originalId], references: [id])
+  derived        Pictogram[]       @relation("PictogramBaseRelation")
+    userPictogramUsages UserPictogramUsage[]
+
 }
 
 model PictogramPos {
@@ -163,40 +195,33 @@ model PictogramPos {
   source      String?
   createdAt   DateTime  @default(now())
 
-  pictogram   Pictogram @relation(fields: [pictogramId], references: [id])
+  pictogram   Pictogram   @relation(fields: [pictogramId], references: [id])
   pos         PartOfSpeech @relation(fields: [posId], references: [id])
 
   @@unique([pictogramId, posId])
 }
+model UserPictogramUsage {
+  id            Int        @id @default(autoincrement())
+  userId        Int
+  pictogramId   Int
+  usageCount    Int        @default(0)
+  lastUsedAt    DateTime   @default(now())
 
-model SemanticCategory {
-  id        Int                @id @default(autoincrement())
-  name      String             @unique
-  description String?
-  parentId  Int?
+  user          User       @relation(fields: [userId], references: [id])
+  pictogram     Pictogram  @relation(fields: [pictogramId], references: [id])
 
-  parent      SemanticCategory? @relation("CategoryParent", fields: [parentId], references: [id])
-  children    SemanticCategory[] @relation("CategoryParent")
-  pictograms  PictogramSemantic[]
+  @@unique([userId, pictogramId])
 }
 
-model PictogramSemantic {
-  pictogramId Int
-  categoryId  Int
 
-  pictogram  Pictogram        @relation(fields: [pictogramId], references: [id])
-  category   SemanticCategory @relation(fields: [categoryId], references: [id])
-
-  @@id([pictogramId, categoryId])
-}
 
 model Sentence {
-  id             Int      @id @default(autoincrement())
-  userId         Int
+  id              Int      @id @default(autoincrement())
+  userId          Int
   telegraphicText String
-  naturalText    String
-  meta           Json?
-  createdAt      DateTime @default(now())
+  naturalText     String
+  meta            Json?
+  createdAt       DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
 }
@@ -225,6 +250,25 @@ model UserStatistics {
   updatedAt           DateTime?
 }
 
+model MLModelMetadata {
+  id           Int       @id @default(autoincrement())
+  name         String
+  version      String    @unique
+  description  String?
+  framework    String    @default("PyTorch")
+  architecture String    @default("MiniBERT")
+  hyperparams  Json?
+  metrics      Json?
+  trainedAt    DateTime  @default(now())
+  trainedBy    Int?
+  user         User?     @relation("ModelTrainer", fields: [trainedBy], references: [id])
+  storagePath  String?
+  isDeployed   Boolean   @default(false)
+  notes        String?
+
+  trainingData MLTrainingData[]
+  predictions  MLPrediction[]
+}
 
 model MLTrainingData {
   id              Int      @id @default(autoincrement())
@@ -233,25 +277,38 @@ model MLTrainingData {
   nextPictogramId Int?
   context         Json?
   modelVersion    String?
-  createdAt       DateTime @default(now())
+  modelId         Int?
+  isValidated     Boolean   @default(false)
+  validatedBy     Int?
+  validatedAt     DateTime?
 
-  user       User       @relation(fields: [userId], references: [id])
-  nextPictogram Pictogram? @relation(fields: [nextPictogramId], references: [id])
+  user            User       @relation(fields: [userId], references: [id])
+  nextPictogram   Pictogram? @relation(fields: [nextPictogramId], references: [id])
+  model           MLModelMetadata? @relation(fields: [modelId], references: [id])
+  validator       User?      @relation("TrainingValidator", fields: [validatedBy], references: [id])
+
+  createdAt       DateTime   @default(now())
+
+  @@index([userId, createdAt])
+  @@index([modelId])
 }
 
 model MLPrediction {
   id                   Int        @id @default(autoincrement())
   userId               Int
-  user                 User       @relation(fields: [userId], references: [id])
-
   predictedPictogramId Int
-  predictedPictogram   Pictogram  @relation("PredictedPictogramRelation", fields: [predictedPictogramId], references: [id])
-
   actualPictogramId    Int?
-  actualPictogram      Pictogram? @relation("ActualPictogramRelation", fields: [actualPictogramId], references: [id])
-
   context              Json
+  modelId              Int?
   createdAt            DateTime   @default(now())
+
+  user               User       @relation(fields: [userId], references: [id])
+  predictedPictogram Pictogram  @relation("PredictedPictogramRelation", fields: [predictedPictogramId], references: [id])
+  actualPictogram    Pictogram? @relation("ActualPictogramRelation", fields: [actualPictogramId], references: [id])
+  model              MLModelMetadata? @relation(fields: [modelId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([modelId])
 }
 
 model AuthToken {

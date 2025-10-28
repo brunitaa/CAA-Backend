@@ -1,4 +1,3 @@
-// routes/grid.routes.js
 import express from "express";
 import {
   createGrid,
@@ -13,7 +12,6 @@ import { verifyToken } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-// Todas las rutas requieren token
 router.use(verifyToken);
 
 router.post("/create", createGrid);
@@ -22,7 +20,6 @@ router.get("/:id", getGridById);
 router.put("/edit/:id", updateGrid);
 router.delete("/delete/:id", deleteGrid);
 
-// Rutas para grids archivados
 router.get("/archived/all", getArchivedGrids);
 router.patch("/restore/:id", restoreGrid);
 

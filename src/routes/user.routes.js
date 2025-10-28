@@ -1,5 +1,5 @@
 import express from "express";
-import { verifyToken } from "../middlewares/auth.middleware.js";
+import { authorizeRole, verifyToken } from "../middlewares/auth.middleware.js";
 import {
   updateAdmin,
   updateCaregiver,
@@ -9,18 +9,23 @@ import {
   getAdmins,
   getCaregivers,
   getSpeakers,
+  toggleActive,
 } from "../controllers/user.controller.js";
 
 const router = express.Router();
 
-// Actualización de datos básicos
+router.patch(
+  "/:id/toggle-active",
+  verifyToken,
+  authorizeRole(["admin", "caregiver"]),
+  toggleActive
+);
+
 router.put("/speaker/:id", verifyToken, updateSpeaker);
 router.put("/caregiver/:id", verifyToken, updateCaregiver);
 router.put("/admin/:id", verifyToken, updateAdmin);
-// Solicitud de cambio de email
 router.post("/:id/request-email-change", verifyToken, requestEmailChange);
 
-// Confirmación de cambio de email con OTP
 router.post("/:id/confirm-email-change", verifyToken, confirmEmailChange);
 
 router.get("/admins", getAdmins);

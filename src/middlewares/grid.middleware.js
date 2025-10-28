@@ -1,4 +1,3 @@
-// middlewares/grid.middleware.js
 export const authorizeGridAccess = (roleCheck) => async (req, res, next) => {
   const { userId, role } = req.user;
   const { gridId } = req.params;

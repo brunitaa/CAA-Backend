@@ -81,6 +81,31 @@ export const getCaregivers = async (req, res, next) => {
   }
 };
 
+export const toggleActive = async (req, res, next) => {
+  try {
+    const targetUserId = parseInt(req.params.id, 10);
+    const requester = req.user;
+
+    const updatedUser = await userService.toggleUserActive(
+      targetUserId,
+      requester
+    );
+
+    res.json({
+      message: `Usuario ${updatedUser.username} ahora está ${
+        updatedUser.isActive ? "activo" : "desactivado"
+      }`,
+      user: {
+        id: updatedUser.id,
+        username: updatedUser.username,
+        isActive: updatedUser.isActive,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const confirmEmailChange = async (req, res, next) => {
   try {
     const requester = { id: req.user.userId, role: req.user.role };

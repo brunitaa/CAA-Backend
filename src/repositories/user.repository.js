@@ -1,4 +1,3 @@
-// src/repositories/user.repository.js
 import prisma from "../lib/prisma.js";
 import { AppError } from "../errors/app.errors.js";
 

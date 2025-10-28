@@ -2,9 +2,6 @@ import { PosService } from "../services/pos.service.js";
 
 const posService = new PosService();
 
-// -----------------
-// POS Controllers
-// -----------------
 export const getAllPos = async (req, res) => {
   try {
     const posList = await posService.getAllPos();
@@ -63,47 +60,6 @@ export const deletePos = async (req, res) => {
     const id = parseInt(req.params.id);
     await posService.deletePos(req.user, id);
     res.json({ message: "POS eliminado" });
-  } catch (err) {
-    if (err.message.includes("No autorizado"))
-      return res.status(403).json({ message: err.message });
-    res.status(400).json({ message: err.message });
-  }
-};
-
-// -----------------
-// Semantic Controllers
-// -----------------
-export const getSemanticByPos = async (req, res) => {
-  try {
-    const posId = parseInt(req.params.posId);
-    const semantics = await posService.getSemanticByPos(posId);
-    res.json(semantics);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-};
-
-export const createSemantic = async (req, res) => {
-  try {
-    const { posId, name, description } = req.body;
-    const semantic = await posService.createSemantic(req.user, {
-      posId,
-      name,
-      description,
-    });
-    res.status(201).json(semantic);
-  } catch (err) {
-    if (err.message.includes("No autorizado"))
-      return res.status(403).json({ message: err.message });
-    res.status(400).json({ message: err.message });
-  }
-};
-
-export const deleteSemantic = async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    await posService.deleteSemantic(req.user, id);
-    res.json({ message: "Semantic eliminado" });
   } catch (err) {
     if (err.message.includes("No autorizado"))
       return res.status(403).json({ message: err.message });

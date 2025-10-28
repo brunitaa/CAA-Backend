@@ -30,31 +30,4 @@ export class PosRepository {
       where: { id },
     });
   }
-
-  // -----------------
-  // SEMANTIC
-  // -----------------
-  async getSemanticByPos(posId) {
-    return prisma.semanticCategory.findMany({
-      where: {
-        pictograms: {
-          some: { pictogram: { pictogramPos: { some: { posId } } } },
-        },
-      },
-    });
-  }
-
-  async createSemantic(data) {
-    return prisma.semanticCategory.create({ data });
-  }
-
-  async deleteSemantic(id) {
-    return prisma.semanticCategory.delete({
-      where: { id },
-    });
-  }
-
-  async findSemanticById(id) {
-    return prisma.semanticCategory.findUnique({ where: { id } });
-  }
 }

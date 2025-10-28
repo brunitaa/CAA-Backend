@@ -5,9 +5,6 @@ import {
   createPos,
   updatePos,
   deletePos,
-  getSemanticByPos,
-  createSemantic,
-  deleteSemantic,
 } from "../controllers/pos.controller.js";
 import { verifyToken, authorizeRole } from "../middlewares/auth.middleware.js";
 

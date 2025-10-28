@@ -1,9 +1,39 @@
 import { userRepository } from "../repositories/user.repository.js";
 import { generateOTP } from "../utils/otp.js";
+import { CaregiverSpeakerRepository } from "../repositories/caregiverSpeaker.repository.js";
 import { sendOTPEmail } from "../services/email.service.js";
 import { AppError } from "../errors/app.errors.js";
 import prisma from "../lib/prisma.js";
+
+const caregiverSpeakerRepo = new CaregiverSpeakerRepository();
 class UserService {
+  async toggleUserActive(userId, requester) {
+    const user = await userRepository.updateUser(userId, {});
+    if (!user) throw new AppError("Usuario no encontrado", 404);
+
+    if (requester.role === "admin") {
+      const updated = await userRepository.updateUser(userId, {
+        isActive: !user.isActive,
+      });
+      return updated;
+    }
+
+    if (requester.role === "caregiver") {
+      const relation = await caregiverSpeakerRepo.exists(
+        requester.userId,
+        userId
+      );
+      if (!relation) throw new AppError("No autorizado", 403);
+
+      const updated = await userRepository.updateUser(userId, {
+        isActive: !user.isActive,
+      });
+      return updated;
+    }
+
+    throw new AppError("Rol no autorizado", 403);
+  }
+
   async updateSpeaker(speaker, data) {
     if (!data || Object.keys(data).length === 0)
       throw new AppError("No hay datos para actualizar", 400);
@@ -48,7 +78,6 @@ class UserService {
     return await userRepository.updateUser(userId, safeData);
   }
   async updateAdmin(admin, userId, data) {
-    // Solo puede editar su propio perfil
     if (admin.id !== userId) {
       throw new AppError(
         "No autorizado: un admin solo puede editar su propio perfil",
@@ -63,7 +92,6 @@ class UserService {
 
     const safeData = {};
 
-    // Username único
     if (data.username) {
       const existingUser = await prisma.user.findUnique({
         where: { username: data.username },
@@ -73,7 +101,6 @@ class UserService {
       safeData.username = data.username;
     }
 
-    // Email único
     if (data.email) {
       const existingEmail = await prisma.user.findUnique({
         where: { email: data.email },
@@ -83,24 +110,19 @@ class UserService {
       safeData.email = data.email;
     }
 
-    // Password (si se envía)
     if (data.password) {
-      // Aquí podrías hashear con bcrypt antes de guardar
       safeData.password = data.password;
     }
 
-    // Otros campos
     if (data.gender) safeData.gender = data.gender;
     if (data.age !== undefined) safeData.age = data.age;
 
     if (Object.keys(safeData).length === 0)
       throw new AppError("No hay campos válidos para actualizar", 400);
 
-    // Actualizar en la base de datos
     return await userRepository.updateUser(userId, safeData);
   }
 
-  // Solicitar cambio de email
   async requestEmailChange(requester, userId, newEmail) {
     if (!(requester.role === "admin" || requester.role === "caregiver"))
       throw new AppError("No autorizado a cambiar email", 403);
@@ -115,7 +137,6 @@ class UserService {
     return { message: "OTP enviado al nuevo email" };
   }
 
-  // Confirmar cambio de email
   async confirmEmailChange(requester, userId, newEmail, otp) {
     if (!(requester.role === "admin" || requester.role === "caregiver"))
       throw new AppError("No autorizado a confirmar email", 403);
@@ -137,7 +158,7 @@ class UserService {
     return await prisma.user.findMany({
       where: {
         role: {
-          name: "admin", // filtramos por el campo name de la relación Role
+          name: "admin",
         },
       },
       select: {

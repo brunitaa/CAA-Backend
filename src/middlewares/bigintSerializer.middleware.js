@@ -1,4 +1,3 @@
-// middlewares/bigintSerializer.js
 export const bigintSerializer = (req, res, next) => {
   const oldJson = res.json;
   res.json = function (data) {

@@ -1,4 +1,3 @@
-// repositories/grid.repository.js
 import prisma from "../lib/prisma.js";
 
 export class GridRepository {
@@ -50,7 +49,18 @@ export class GridRepository {
       throw new Error("Error obteniendo grids: " + err.message);
     }
   }
-
+  async getGridsByUserIdsAndStatus(userIds, isActive) {
+    return prisma.grid.findMany({
+      where: {
+        userId: { in: userIds },
+        isActive: isActive,
+      },
+      include: {
+        user: true,
+        createdByUser: true,
+      },
+    });
+  }
   async getGridsByUserIds(userIds) {
     try {
       return await prisma.grid.findMany({

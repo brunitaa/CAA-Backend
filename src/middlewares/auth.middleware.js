@@ -9,6 +9,7 @@ export const verifyToken = (req, res, next) => {
 
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
+    console.log("Payload JWT:", payload);
     req.user = payload;
     next();
   } catch {
@@ -37,19 +38,24 @@ export const authorizeRole =
         return res.status(403).json({ message: "No autorizado para este rol" });
       }
 
-      req.user = payload;
+      req.user = { ...payload, role: roleName };
 
-      const session = await prisma.userSession.findFirst({
-        where: { userId: payload.userId, endedAt: null },
-      });
-      if (!session)
-        return res.status(401).json({ message: "Sesión no activa" });
+      if (roleName !== "speaker") {
+        const session = await prisma.userSession.findFirst({
+          where: { userId: payload.userId, endedAt: null },
+        });
+        if (!session)
+          return res.status(401).json({ message: "Sesión no activa" });
 
-      req.sessionId = session.id;
+        req.sessionId = session.id;
+      } else {
+        req.sessionId = null;
+      }
+
       next();
     } catch (err) {
       console.error("Error en authorizeRole:", err);
-      res.status(401).json({ message: "Token inválido" });
+      res.status(401).json({ message: "Token inválido o expirado" });
     }
   };
 

@@ -1,14 +1,15 @@
 import express from "express";
 import {
   createPictogram,
-  updatePictogram,
   deletePictogram,
   restorePictogram,
   getAllPictograms,
   getArchivedPictograms,
   getPictogram,
   getAllPos,
-  getAllSemanticCategories,
+  updatePictogramAdmin,
+  updatePictogramByCaregiver,
+  updatePictogramBySpeaker,
 } from "../controllers/pictogram.controller.js";
 import { verifyToken, authorizeRole } from "../middlewares/auth.middleware.js";
 import { uploadImage } from "../middlewares/upload.middleware.js";
@@ -16,6 +17,8 @@ import { uploadImage } from "../middlewares/upload.middleware.js";
 const router = express.Router();
 
 router.use(verifyToken);
+
+router.get("/dropdown/pos", authorizeRole(["admin", "caregiver"]), getAllPos);
 
 router.post(
   "/create",
@@ -25,10 +28,24 @@ router.post(
 );
 
 router.put(
-  "/edit/:id",
-  authorizeRole(["admin", "caregiver"]),
+  "/edit/caregiver/:id",
+  verifyToken,
+  authorizeRole(["caregiver"]),
   uploadImage.single("imageFile"),
-  updatePictogram
+  updatePictogramByCaregiver
+);
+router.put(
+  "/edit/speaker/:id",
+  verifyToken,
+  authorizeRole(["speaker"]),
+  uploadImage.single("imageFile"),
+  updatePictogramBySpeaker
+);
+router.put(
+  "/edit/admin/:id",
+  verifyToken,
+  uploadImage.single("imageFile"),
+  updatePictogramAdmin
 );
 
 router.delete(
@@ -43,7 +60,11 @@ router.patch(
   restorePictogram
 );
 
-router.get("/", authorizeRole(["admin", "caregiver"]), getAllPictograms);
+router.get(
+  "/",
+  authorizeRole(["admin", "caregiver", "speaker"]),
+  getAllPictograms
+);
 
 router.get(
   "/archived",
@@ -52,14 +73,5 @@ router.get(
 );
 
 router.get("/:id", authorizeRole(["admin", "caregiver"]), getPictogram);
-
-router.get("/dropdown/pos", authorizeRole(["admin", "caregiver"]), getAllPos);
-
-// Obtener todas las categorías semánticas para dropdown
-router.get(
-  "/dropdown/semantic",
-  authorizeRole(["admin", "caregiver"]),
-  getAllSemanticCategories
-);
 
 export default router;

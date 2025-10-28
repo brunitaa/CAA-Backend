@@ -3,7 +3,6 @@ import prisma from "../lib/prisma.js";
 
 const authService = new AuthService();
 
-// Registrar Admin
 export const registerAdmin = async (req, res, next) => {
   try {
     const creatorId = req.user.userId;
@@ -22,7 +21,6 @@ export const registerAdmin = async (req, res, next) => {
   }
 };
 
-// Verificar AuthToken Admin
 export const verifyAdminToken = async (req, res, next) => {
   try {
     const { email, token } = req.body;
@@ -46,7 +44,6 @@ export const verifyAdminToken = async (req, res, next) => {
   }
 };
 
-// Login Admin
 export const loginAdmin = async (req, res, next) => {
   try {
     const { email, password } = req.body;
@@ -74,7 +71,6 @@ export const loginAdmin = async (req, res, next) => {
   }
 };
 
-// Registrar Caregiver
 export const registerCaregiver = async (req, res, next) => {
   try {
     const { email, username, password } = req.body;
@@ -89,31 +85,41 @@ export const registerCaregiver = async (req, res, next) => {
   }
 };
 
-// Verificar AuthToken Caregiver
-export const verifyTokenCaregiver = async (req, res, next) => {
+export const verifyOtpCaregiver = async (req, res, next) => {
   try {
-    const { email, token } = req.body;
-    const result = await authService.verifyAuthToken({ email, token });
+    const { email, otp } = req.body;
 
+    if (!email || !otp) {
+      throw new AppError("Email y OTP son requeridos", 400);
+    }
+
+    // Llamamos al servicio de auth que valida el OTP
+    const result = await authService.verifyOtp({ email, otp });
+
+    // Actualizar usuario como activo y registrar último login
     await prisma.user.update({
       where: { id: result.userId },
       data: { isActive: true, lastLogin: new Date() },
     });
 
+    // Enviar JWT en cookie
     res.cookie("token", result.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 días
     });
 
-    res.json(result);
+    res.json({
+      success: true,
+      message: "OTP verificado correctamente",
+      data: result,
+    });
   } catch (err) {
     next(err);
   }
 };
 
-// Login Caregiver
 export const loginCaregiver = async (req, res, next) => {
   try {
     const { email, password } = req.body;
@@ -134,13 +140,12 @@ export const loginCaregiver = async (req, res, next) => {
       maxAge: 24 * 60 * 60 * 1000,
     });
 
-    res.json({ message: "Login exitoso", sessionId, userId });
+    res.json({ message: "Login exitoso!", sessionId, userId, token });
   } catch (err) {
     next(err);
   }
 };
 
-// Logout
 export const logout = async (req, res, next) => {
   try {
     const sessionId = req.sessionId;
@@ -153,7 +158,6 @@ export const logout = async (req, res, next) => {
   }
 };
 
-// Solicitar AuthToken para reseteo de contraseña
 export const requestPasswordToken = async (req, res, next) => {
   try {
     const { email } = req.body;
@@ -164,7 +168,6 @@ export const requestPasswordToken = async (req, res, next) => {
   }
 };
 
-// Resetear contraseña usando AuthToken
 export const resetPasswordWithToken = async (req, res, next) => {
   try {
     const { email, token, newPassword } = req.body;
@@ -179,7 +182,6 @@ export const resetPasswordWithToken = async (req, res, next) => {
   }
 };
 
-// Obtener perfil
 export const getProfile = async (req, res, next) => {
   try {
     const userId = req.user.userId;
@@ -187,5 +189,25 @@ export const getProfile = async (req, res, next) => {
     res.json(profile);
   } catch (err) {
     next(err);
+  }
+};
+
+export const resendOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Email es requerido" });
+    }
+    const result = await authService.resendOTP({ email });
+
+    return res.json(result);
+  } catch (error) {
+    console.error(error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Error del servidor" });
   }
 };

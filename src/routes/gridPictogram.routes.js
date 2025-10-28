@@ -13,7 +13,7 @@ const asyncHandler = (fn) => (req, res, next) => {
 const router = Router();
 
 router.post(
-  "/assign-pictogram",
+  "/assign-pictogram/:gridId",
   authorizeRole(["admin", "caregiver"]),
   addPictogramsToGrid
 );

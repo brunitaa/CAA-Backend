@@ -2,7 +2,6 @@ import prisma from "../lib/prisma.js";
 
 export const statsService = {
   getDashboardStats: async () => {
-    // Conteos
     const totalUsers = await prisma.user.count();
     const activeUsers = await prisma.user.count({ where: { isActive: true } });
     const activeSessions = await prisma.userSession.count({
@@ -10,7 +9,6 @@ export const statsService = {
     });
     const totalPictograms = await prisma.pictogram.count();
 
-    // Activity stats últimos 7 días
     const today = new Date();
     const last7Days = [...Array(7)]
       .map((_, i) => {
@@ -34,7 +32,6 @@ export const statsService = {
       })
     );
 
-    // Categorías
     const categoryDataRaw = await prisma.partOfSpeech.findMany({
       select: { name: true, pictogramPos: true },
     });
@@ -44,7 +41,6 @@ export const statsService = {
       count: cat.pictogramPos.length,
     }));
 
-    // Últimos pictogramas agregados (ej: últimos 10)
     const recentUploadsRaw = await prisma.pictogram.findMany({
       orderBy: { createdAt: "desc" },
       take: 10,
