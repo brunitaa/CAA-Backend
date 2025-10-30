@@ -191,7 +191,6 @@ model PictogramPos {
   pictogramId Int
   posId       Int
   isPrimary   Boolean   @default(false)
-  confidence  Decimal   @default(1.0)
   source      String?
   createdAt   DateTime  @default(now())
 
@@ -219,7 +218,6 @@ model Sentence {
   id              Int      @id @default(autoincrement())
   userId          Int
   telegraphicText String
-  naturalText     String
   meta            Json?
   createdAt       DateTime @default(now())
 

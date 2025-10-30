@@ -28,7 +28,6 @@ async function main() {
   });
   if (!baseImage) throw new Error("No existe imagen base /images/default.png");
 
-  // Nuevas palabras agrupadas por categoría
   const palabrasPorCategoria = {
     cocina: [
       "agua",

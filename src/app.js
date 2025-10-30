@@ -18,7 +18,8 @@ import { logger } from "./middlewares/logger.middleware.js";
 import statsRoutes from "./routes/stats.routes.js";
 import speakerSettingsRoutes from "./routes/speakerSettings.routes.js";
 import sentencesRoutes from "./routes/sentence.routes.js";
-
+import interactionsRoutes from "./routes/interaction.routes.js";
+import predictRoutes from "./routes/prediction.routes.js";
 const app = express();
 
 app.use(express.json());
@@ -34,6 +35,7 @@ app.use(
       "http://localhost:5173",
       "http://localhost:8081",
       "http://192.168.0.11:19000",
+      "http://localhost:8000",
     ],
     credentials: true,
   })
@@ -51,7 +53,8 @@ app.use("/api/gridPictogram", gridPictogramRoutes);
 app.use("/api/pos", posRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/sentences", sentencesRoutes);
-
+app.use("/api/interactions", interactionsRoutes);
+app.use("/api", predictRoutes);
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 app.use((err, req, res, next) => {

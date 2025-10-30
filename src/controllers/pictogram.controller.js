@@ -57,6 +57,20 @@ export const updatePictogramAdmin = async (req, res) => {
   }
 };
 
+export const getPictogramsML = async (req, res) => {
+  try {
+    const speakerId = parseInt(req.params.id, 10);
+    console.log("Pictogram ID recibido:", speakerId);
+
+    const pictograms = await pictogramService.getAllPictogramsForModel(
+      speakerId
+    );
+    res.json(pictograms);
+  } catch (error) {
+    res.status(403).json({ error: error.message });
+  }
+};
+
 export const updatePictogramByCaregiver = async (req, res) => {
   try {
     const pictogramId = parseInt(req.params.id, 10);

@@ -18,6 +18,30 @@ export class PictogramRepository {
     });
   }
 
+  async getGlobalOrSpeaker(speakerId) {
+    try {
+      const pictograms = await prisma.pictogram.findMany({
+        where: {
+          isActive: true,
+          OR: [
+            { userId: null }, // global
+            { userId: speakerId }, // personales del speaker
+          ],
+        },
+        include: {
+          pictogramPos: { include: { pos: true } },
+          image: true,
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      return pictograms;
+    } catch (error) {
+      console.error("Error en PictogramRepository.getGlobalOrSpeaker:", error);
+      throw error;
+    }
+  }
+
   async updatePictogram(id, data) {
     return prisma.pictogram.update({
       where: { id },

@@ -4,7 +4,7 @@ import { ImageRepository } from "../repositories/image.repository.js";
 import { authorizeRole } from "../middlewares/auth.middleware.js";
 const pictogramRepo = new PictogramRepository();
 const imageRepo = new ImageRepository();
-
+import { exec } from "child_process";
 export class PictogramService {
   constructor() {
     this.prisma = prisma;
@@ -469,6 +469,11 @@ export class PictogramService {
       console.error("Error en getAllPictograms:", error);
       throw error;
     }
+  }
+  async getAllPictogramsForModel(speakerId) {
+    // Solo globales + personales del speaker
+    const pictos = await pictogramRepo.getGlobalOrSpeaker(speakerId);
+    return pictos.map((p) => p.id.toString());
   }
 
   async getPictogramById(user, pictogramId) {

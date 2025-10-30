@@ -10,6 +10,7 @@ import {
   updatePictogramAdmin,
   updatePictogramByCaregiver,
   updatePictogramBySpeaker,
+  getPictogramsML,
 } from "../controllers/pictogram.controller.js";
 import { verifyToken, authorizeRole } from "../middlewares/auth.middleware.js";
 import { uploadImage } from "../middlewares/upload.middleware.js";
@@ -68,10 +69,14 @@ router.get(
 
 router.get(
   "/archived",
-  authorizeRole(["admin", "caregiver"]),
+  authorizeRole(["admin", "caregiver", "speaker"]),
   getArchivedPictograms
 );
 
-router.get("/:id", authorizeRole(["admin", "caregiver"]), getPictogram);
+router.get(
+  "/:id",
+  authorizeRole(["admin", "caregiver", "speaker"]),
+  getPictogram
+);
 
 export default router;
